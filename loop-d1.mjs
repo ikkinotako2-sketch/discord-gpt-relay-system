@@ -132,7 +132,7 @@ export async function commitLoopOutput(db, claimed, text, now=Date.now()) {
 
 export async function failLoopClaim(db, claimed, errorCode='MODEL_ERROR', now=Date.now()) {
   dbRequired(db);
-  const reason=['MODEL_ERROR','INVALID_MODEL_OUTPUT'].includes(errorCode)?errorCode:'MODEL_ERROR';
+  const reason=['MODEL_ERROR','INVALID_MODEL_OUTPUT','TASK_MISMATCH'].includes(errorCode)?errorCode:'MODEL_ERROR';
   const r=await db.prepare(`UPDATE relay_loop_jobs SET
     status=CASE WHEN stop_requested=1 THEN 'stopped' ELSE 'failed' END,
     next_role=NULL,active_slot=NULL,lease_owner=NULL,lease_expires_at=NULL,
