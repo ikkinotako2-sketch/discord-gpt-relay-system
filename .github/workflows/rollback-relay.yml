@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm_rollback:
-        description: 'Type RESTORE-PREVIOUS to restore the last user-tested /ask and /relay version'
+        description: 'Type RESTORE-PREVIOUS to restore the pre-loop production Worker with new operator secret verified by read-only probe'
         required: true
         type: string
 permissions:
@@ -28,7 +28,7 @@ jobs:
       - name: Restore the exact version that was live immediately before release
         run: |
           npx --yes wrangler@4 versions deploy \
-            "82537b42-90d1-424d-92d4-9dcc5b1309de@100%" \
+            "b1b421c3-23fe-4a55-b8a7-db72b36848cc@100%" \
             --name steep-glitter-b5cddiscord-ai-relay-lab \
             --message "Restore last user-tested Discord relay version" --yes
       - name: Record deployment versions
