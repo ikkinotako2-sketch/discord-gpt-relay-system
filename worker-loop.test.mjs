@@ -62,6 +62,7 @@ test('one call per scheduled tick: four calls and a final persisted answer',asyn
   assert.equal(events.length,4);
   assert.equal((await getLatestLoop(d,owner)).calls_used,4);
   assert.match((await handleLoopCommand(interaction('loop-status',owner),env)),/最終案/);
+  assert.match((await handleLoopCommand(interaction('loop-status',owner),env)),/元の依頼: Create proposal/);
   assert.equal((await runOneScheduledLoopStep(env,{now:now+4000,leaseOwner:'lease-5'})).status,'idle');
 });
 test('loop-stop immediately stops queued task with zero model calls',async()=>{
