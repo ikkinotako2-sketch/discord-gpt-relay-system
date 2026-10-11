@@ -103,7 +103,7 @@ export default {
       if(!env.LOOP_DB?.prepare || !env.AI?.run || !/^\d{15,22}$/.test(String(env.DISCORD_ALLOWED_USER_ID ?? ''))) return new Response('Loop configuration incomplete',{status:503});
       try {
         await env.LOOP_DB.prepare('SELECT run_id FROM relay_loop_jobs LIMIT 1').first();
-        return new Response('Discord GPT Relay loop-v1 ready.');
+        return new Response('Discord GPT Relay loop-v2 task-focus ready.');
       } catch { return new Response('Loop D1 migration missing',{status:503}); }
     }
     if(request.method!=='POST')return previousWorker.fetch(request,env,ctx);
