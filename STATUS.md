@@ -1,37 +1,32 @@
-# Discord AI Relay Lab — deployment readiness (2026-10-11)
+# Discord AI Relay Lab — verified production status (2026-10-12)
 
-## VERIFIED: INACTIVE_LOOP_CANDIDATE_READY / PRODUCTION_UNCHANGED_BY_THIS_STEP
+## CURRENT: BOUNDED_LOOP_LIVE / CRON_ENABLED / END_TO_END_DISCORD_TEST_PENDING
 
-### Current live production
-- Worker: `steep-glitter-b5cddiscord-ai-relay-lab`
-- Live Cloudflare Worker version: `b1b421c3-23fe-4a55-b8a7-db72b36848cc`, independently established in **read-only** GitHub run [38147537153](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38147537153).
-- GET HTTP 200 with `Discord GPT Relay ready (latency-v1).`; unsigned POST HTTP 401.
-- Secret-name metadata: `DISCORD_PUBLIC_KEY` and `DISCORD_ALLOWED_USER_ID` present, `SETUP_KEY` absent, old unused Worker `DISCORD_BOT_TOKEN` still present. **No secret values were retrieved.** Cannot establish whether the owner ID secret has the correct value beyond its presence.
-- Secret registration created a NEW live version with the same latency-v1 response, so old baseline `f50669d7-7685-4da1-b2e5-567ae7526922` is no longer current.
-- User **has not yet confirmed** that `/ask` and `/relay` both work after the new secret was registered. Retest them before approval of any production change.
+### Verified GitHub Actions evidence
+- **Production release SUCCESS:** [38181913277](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38181913277). Offline tests **55/55 PASS**. The existing Worker `steep-glitter-b5cddiscord-ai-relay-lab` promoted exact pre-uploaded version **`aecc9c29-dbef-4abb-8036-3fd3bfbacc23`** to **100%**.
+- Production response after propagation: GET returned HTTP 200 with exact `Discord GPT Relay loop-v1 ready.` identity, verifying D1 table query, AI binding and operator ID format. A POST without Discord signature returned 401. Automatic rollback was **not** necessary.
+- **Discord command registration SUCCESS:** [38181972890](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38181972890). Discord API returned HTTP 201 for **`/loop`**, **`/loop-status`**, and **`/loop-stop`**. Existing `/ask` and `/relay` commands were not replaced.
+- **Cloudflare Cron activation SUCCESS:** [38182038658](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38182038658). Worker version checked again; Wrangler returned `Deployed ... triggers` with `schedule: */1 * * * *` (once a minute). This trigger deploy changed the Cron schedule, not Worker source code.
+- The old baseline version `b1b421c3-23fe-4a55-b8a7-db72b36848cc` had been verified **read-only** before promotion, after the operator secret was added.
+- The three single-use production command/trigger workflows were removed after verified success. Completed GitHub Actions logs remain available.
 
-### Dedicated D1 database
-- New, Discord-only database `discord-relay-loop-state`, UUID `d80b08a4-0ff7-4320-9575-0d3c55cf7aba`; never use the Project Love Machine database.
-- User screenshots show `relay_loop_jobs` table/index creation succeeded; `SELECT COUNT(*) AS total FROM relay_loop_jobs;` returned `0`.
-- `wrangler.loop.toml` points to that exact database, but the current live Worker is NOT using it yet.
+### Production architecture and limitations
+- Starts only when the allowlisted Discord owner submits `/loop task: ...`. Status and stop are owner-only.
+- One active job globally; a maximum of two `planner -> builder` rounds or **four claimed Llama AI calls**. A result of the first builder becomes reference context for the second planner.
+- Cloudflare Cron runs once per minute; at most one model call per scheduled invocation. It periodically checks D1 even when no work is queued, but **no AI inference call is made when idle**.
+- Dedicated D1 database `discord-relay-loop-state`, UUID `d80b08a4-0ff7-4320-9575-0d3c55cf7aba`, **not** the Project Love Machine D1. User screenshot verified the `relay_loop_jobs` table exists with zero rows before this new production deployment.
+- Includes stop-request semantics, atomic job claim, per-run call bounds, 24-hour retention, no blind retries on unknown jobs, and metadata-only diagnostic logs.
+- **IMPORTANT:** Production HTTP health and mocked/offline tests do not prove the complete Discord-to-Cron-to-D1 four-step loop has finished successfully. This is still awaiting the user's *first live integration test*.
+- Uses **Cloudflare Workers AI Llama**, **not ChatGPT web sessions or OpenAI GPT API**. It is a bounded, explicitly started AI-agent loop, **not an infinite self-running GPT network**. Cloudflare free-plan quotas remain applicable.
 
-### Inactive candidate uploaded and tested
-- Read-only probe: [38147537153](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38147537153) **SUCCESS**.
-- Inactive upload: [38147689151](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38147689151) **SUCCESS**, **55/55 tests PASS**.
-- Exact uploaded candidate Worker version: **`aecc9c29-dbef-4abb-8036-3fd3bfbacc23`**.
-- The upload DID NOT deploy live code and DID NOT enable Cron or register new slash commands.
-- Single-use read-only probe and inactive upload workflows have been removed, preserving completed GitHub execution logs.
+### Immediate user verification needed
+1. In the AI Relay Lab Test Discord server, run `/ask question: こんにちは` and `/relay task: 簡単な挨拶文を考えて` after release; report regressions.
+2. Run **`/loop-status`** first (it should return no history, or show only a known earlier run). If Discord global slash commands take time to appear, wait for registration propagation.
+3. Start exactly **one safe short experiment**: `/loop task: 2周で短い挨拶文を改善して`.
+4. Check `/loop-status` every minute for up to four cron cycles plus propagation time. Desired completion status `完了`, calls used `4/4`, and visible `最終案`. **Do not retry automatically** if result is `failed`, `stopped`, or `unknown`.
+5. Test `/loop-stop` on a **separate deliberately queued** test only if desired, and ensure it does not process further calls. Do not run it during the first completion experiment.
 
-### Guarded rollout still pending explicit production approval
-1. Verify legacy Discord `/ask` and `/relay` work **now**, after the new Worker secret was added.
-2. With explicit authorization for production, run `.github/workflows/loop-release.yml`, entering `DEPLOY-LOOP`. The workflow is pinned to candidate `aecc9c29-dbef-4abb-8036-3fd3bfbacc23` and checks live baseline `b1b421c3-23fe-4a55-b8a7-db72b36848cc` first. Automatic rollback targets the same baseline if post-release health fails.
-3. After production health succeeds, verify legacy `/ask` and `/relay`, and run `register-loop-commands.yml` to register `/loop`, `/loop-status`, `/loop-stop`.
-4. Separately enable the one-minute Cron via `loop-enable-cron.yml` after confirming live `/loop-status` and user approval. No AI calls occur unless the operator explicitly queues a job.
-5. Start a single safe user-authorized test task, monitor status through 4 maximum claimed model calls, and test STOP. Do not blindly retry failed/unknown jobs.
-6. Review and remove the unused, legacy Cloudflare Worker `DISCORD_BOT_TOKEN` secret only after stable production validation; preserving `DISCORD_PUBLIC_KEY` and `AI` is mandatory. Removing secrets can create a new live version.
-
-### Bounded implementation and privacy
-- GitHub files `loop-core.mjs`, `loop-state.mjs`, `loop-d1.mjs`, `worker-loop.mjs`, `wrangler.loop.toml`, and SQL migrations are staged.
-- One active job globally, operator allowlist, at most 2 rounds / 4 AI calls, one inference per Cron tick, revision/lease checks, 24-hour retention, explicit status and STOP, no blind retry.
-- Uses Cloudflare Workers AI **Llama**, NOT a pair of real consumer ChatGPT sessions or official GPT API. ChatGPT subscription alone does not include free OpenAI API credits.
-- Nothing here promises indefinite background running or usage above free quotas. Do not alter PLM resources.
+### Safety / rollback
+- Emergency manual workflow `.github/workflows/rollback-relay.yml` is pinned to the last secret-bearing, pre-loop verified Worker version `b1b421c3-23fe-4a55-b8a7-db72b36848cc`. Production rollback is a user-authorized write; use only if a real regression occurs. The Cron trigger may need separate disabling upon rollback, because version rollbacks and trigger changes are separate operations.
+- The temporary `SETUP_KEY` was absent from the last Cloudflare secret-name check. Legacy unused Worker `DISCORD_BOT_TOKEN` remained, and can be removed **after** stable live command/loop verification, followed by revalidation; preserve `DISCORD_PUBLIC_KEY`, `AI` and `DISCORD_ALLOWED_USER_ID`.
+- Never share secrets or Discord Bot Tokens. Don't modify any Project Love Machine resources.
