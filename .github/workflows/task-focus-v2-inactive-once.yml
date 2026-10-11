@@ -51,7 +51,8 @@ jobs:
       - name: Compile without deployment
         run: npx --yes wrangler@4 deploy --dry-run --config wrangler.loop.toml --outdir /tmp/discord-task-focus-v2
       - name: Upload INACTIVE version only
-        run: npx --yes wrangler@4 versions upload --config wrangler.loop.toml --message "Task focus v2: preserve original task; no production change"
+        run: |
+          npx --yes wrangler@4 versions upload --config wrangler.loop.toml --message "Task focus v2; preserve original task; no production change"
       - name: Confirm production unchanged
         run: |
           echo 'INACTIVE_CANDIDATE_UPLOADED: No production traffic or triggers changed.'
