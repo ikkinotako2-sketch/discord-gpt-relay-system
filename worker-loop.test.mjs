@@ -12,7 +12,7 @@ function db() {
   return {
     prepare(text) {
       const stmt=sql.prepare(text);
-      return {bind(...args) {
+      return {first:async()=>stmt.get()??null,bind(...args) {
         return {
           first:async()=>stmt.get(...args)??null,
           run:async()=>({meta:{changes:stmt.run(...args).changes}})
