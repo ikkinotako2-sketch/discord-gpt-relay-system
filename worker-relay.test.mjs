@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleRelay, handleAsk, validDiscordRequest, generateWithWorkersAI } from './worker-relay.mjs';
+import worker, { handleRelay, handleAsk, validDiscordRequest, generateWithWorkersAI } from './worker-relay.mjs';
 
 test('two real AI binding invocations transmit plan to builder', async () => {
   const calls = [];
@@ -48,4 +48,10 @@ test('ask fails closed on invalid AI response', async () => {
   await assert.rejects(() => handleAsk({data:{options:[{name:'question',value:'hello'}]}}, {
     AI: {run: async()=>({response:null})},
   }), /Invalid model response/);
+});
+
+test('latency version has an unambiguous public health identity', async () => {
+  const r = await worker.fetch(new Request('https://example.invalid/', {method:'GET'}), {}, {});
+  assert.equal(r.status, 200);
+  assert.equal(await r.text(), 'Discord GPT Relay ready (latency-v1).');
 });
