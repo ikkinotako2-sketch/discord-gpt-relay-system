@@ -2,6 +2,12 @@
 
 ## CURRENT: BOUNDED_LOOP_LIVE / CRON_ENABLED / FIRST_END_TO_END_DISCORD_TEST_PASS
 
+### Follow-up quality improvement staged (GitHub only; NOT deployed)
+- `getLatestLoop` now selects the persisted original task and private owner-only `/loop-status` will display `元の依頼` alongside progress and final answer. This allows users to spot topic drift without disclosing the task in logs.
+- Code and test committed; GitHub Actions run **38185482964**: **55/55 PASS**.
+- This status visibility improvement is **not** in the current live Worker version `aecc9c29-dbef-4abb-8036-3fd3bfbacc23`; separate approved staging and rollout would be needed.
+- Screenshot output topic may or may not match the actual user's submitted task; the Discord command input was not shown, so do not report confirmed prompt drift.
+
 ### First real Discord-to-Cron-to-D1 loop: PASS (user screenshots 2026-10-12)
 - Discord `/loop-status` initially showed no run history.
 - `/loop` returned `受付完了` with run ID `d1558987462942916668`.
