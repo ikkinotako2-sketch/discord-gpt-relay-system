@@ -1,11 +1,9 @@
-name: Enable Discord Loop Cron (Manual, Guarded)
+name: Enable Approved Discord Loop Cron Once
 on:
-  workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Type ENABLE-ONE-MINUTE-CRON after checking /loop-status is working'
-        required: true
-        type: string
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/loop-cron-approved.once'
 permissions:
   contents: read
 concurrency:
@@ -13,18 +11,20 @@ concurrency:
   cancel-in-progress: false
 jobs:
   enable:
+    if: ${{ github.event.head_commit.message == 'Enable approved Discord loop cron once' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CONFIRM: ${{ inputs.confirm }}
+      CONFIRM: ENABLE-ONE-MINUTE-CRON
     steps:
       - uses: actions/checkout@v4
       - name: Verify identity and explicit operator authorization
         run: |
-          test "$CONFIRM" = 'ENABLE-ONE-MINUTE-CRON' || { echo 'Cron activation not authorized'; exit 1; }
+          test "$CONFIRM" = 'ENABLE-ONE-MINUTE-CRON' || exit 1
+          test "$(cat preflight/loop-cron-approved.once)" = 'APPROVED_ONCE:CRON:aecc9c29-dbef-4abb-8036-3fd3bfbacc23' || exit 1
           test -n "$CLOUDFLARE_API_TOKEN" || exit 1
           test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534' || exit 1
           grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.loop.toml || exit 1
@@ -40,6 +40,16 @@ jobs:
           const b=await fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)});
           if(a.status!==200 || t.trim()!=='Discord GPT Relay loop-v1 ready.' || b.status!==401)
             throw Error('Loop Worker and signed interaction handler not ready. Cron remains disabled.');
+          NODE
+      - name: Confirm exact live loop version before enabling Cron
+        run: |
+          npx --yes wrangler@4 deployments list --name steep-glitter-b5cddiscord-ai-relay-lab > /tmp/discord-loop-live-cron.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const raw=fs.readFileSync('/tmp/discord-loop-live-cron.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const found=[...raw.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(m=>m[1]);
+          if(found.at(-1)!=='aecc9c29-dbef-4abb-8036-3fd3bfbacc23')throw Error('Unknown live Worker; do not enable cron');
+          console.log('Exact approved loop Worker is live');
           NODE
       - name: Activate one-minute Cloudflare Cron trigger only after verification
         run: npx --yes wrangler@4 triggers deploy --config wrangler.loop.toml
