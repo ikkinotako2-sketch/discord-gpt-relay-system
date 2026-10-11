@@ -1,0 +1,41 @@
+name: Upload Relay Candidate (No Deployment)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_worker:
+        description: 'Type exact Worker name to upload a new inactive version'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-version-upload
+  cancel-in-progress: false
+jobs:
+  upload:
+    if: ${{ inputs.confirm_worker == 'steep-glitter-b5cddiscord-ai-relay-lab' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test code without external calls
+        run: node --test relay.test.mjs worker-relay.test.mjs
+      - name: Validate target credentials and source
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing Cloudflare API token'; exit 1; }
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534' || { echo 'Unexpected account ID'; exit 1; }
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.toml || exit 1
+          grep -Fxq 'keep_vars = true' wrangler.toml || exit 1
+      - name: Compile only, do not deploy
+        run: npx --yes wrangler@4 deploy --dry-run --config wrangler.toml --outdir /tmp/discord-relay-preview
+      - name: Upload inactive version (does NOT change live traffic)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 versions upload --config wrangler.toml --message "Relay preview from GitHub Actions"
