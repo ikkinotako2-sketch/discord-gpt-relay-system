@@ -97,7 +97,7 @@ test('unsigned Discord requests get 401 and cannot reach D1',async()=>{
 test('D1-backed health rejects missing DB, then confirms uniquely migrated loop worker',async()=>{
   const req=new Request('https://test.invalid/',{method:'GET'});
   assert.equal((await worker.fetch(req,{},{})).status,503);
-  const res=await worker.fetch(req,{LOOP_DB:db()},{});
+  const res=await worker.fetch(req,envBase(db()),{});
   assert.equal(res.status,200);
   assert.equal(await res.text(),'Discord GPT Relay loop-v1 ready.');
 });
