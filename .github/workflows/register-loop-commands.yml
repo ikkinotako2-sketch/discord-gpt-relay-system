@@ -1,6 +1,9 @@
-name: Register Loop Commands (Verified Live Only)
+name: Register Approved Loop Commands Once
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/loop-commands-register.once'
 permissions:
   contents: read
 concurrency:
@@ -8,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   register:
+    if: ${{ github.event.head_commit.message == 'Register verified Discord loop commands once' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -15,6 +19,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Check one-shot registration marker
+        run: |
+          test "$(cat preflight/loop-commands-register.once)" = 'APPROVED_ONCE:REGISTER:aecc9c29-dbef-4abb-8036-3fd3bfbacc23'
       - name: Confirm new loop Worker is actually live and ready
         run: |
           node --input-type=module <<'NODE'
