@@ -1,5 +1,12 @@
 # AI Relay Lab — verified status (2026-10-11)
 
+### D1 provisioning update — user screenshot verified (2026-10-11)
+- Dedicated Discord-only D1 named `discord-relay-loop-state` was created on Cloudflare.
+- Database UUID shown by dashboard and now pinned in `wrangler.loop.toml`: `d80b08a4-0ff7-4320-9575-0d3c55cf7aba`.
+- Screenshot still shows **0 tables**. Schema migration has **NOT** been applied or verified.
+- **Do not deploy** the loop Worker or run loop-upload/release yet. Await D1 console schema apply and operator `DISCORD_ALLOWED_USER_ID` secret configuration.
+- Project Love Machine database remains untouched.
+
 ## Stage 3 — all GPT-accessible development completed (2026-10-11)
 
 **STATUS: GITHUB_IMPLEMENTED / 55_TESTS_PASS / D1_AND_OPERATOR_CONFIG_BLOCKED / LIVE_NOT_UPDATED.**
