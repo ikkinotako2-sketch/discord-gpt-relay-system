@@ -109,7 +109,7 @@ export async function respondToDiscord(interaction, env, content) {
 
 export default {
   async fetch(request, env, ctx) {
-    if (request.method === 'GET') return new Response('Discord GPT Relay candidate (not deployed).');
+    if (request.method === 'GET') return new Response('Discord GPT Relay ready (latency-v1).');
     if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
     if (!env.DISCORD_PUBLIC_KEY) return new Response('Missing public key', { status: 503 });
     const raw = await request.text();
