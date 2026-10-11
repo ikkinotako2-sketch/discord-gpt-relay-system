@@ -64,4 +64,5 @@ jobs:
           if(r.status!==200||p.status!==401)throw Error('Existing Worker health or signature rejection failed');
           NODE
       - name: Finish
-        run: echo 'READ_ONLY_PROBE_COMPLETE: No production or D1 changes, no AI calls.'
+        run: |
+          echo 'READ_ONLY_PROBE_COMPLETE: No production or D1 changes, no AI calls.'
