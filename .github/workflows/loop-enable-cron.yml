@@ -1,0 +1,47 @@
+name: Enable Discord Loop Cron (Manual, Guarded)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type ENABLE-ONE-MINUTE-CRON after checking /loop-status is working'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify identity and explicit operator authorization
+        run: |
+          test "$CONFIRM" = 'ENABLE-ONE-MINUTE-CRON' || { echo 'Cron activation not authorized'; exit 1; }
+          test -n "$CLOUDFLARE_API_TOKEN" || exit 1
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534' || exit 1
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.loop.toml || exit 1
+          grep -Fxq 'crons = ["*/1 * * * *"]' wrangler.loop.toml || exit 1
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.loop.toml || exit 1
+          if grep -Fq 'REPLACE_WITH_' wrangler.loop.toml; then exit 1; fi
+      - name: Require verified D1-backed production Worker
+        run: |
+          node --input-type=module <<'NODE'
+          const url='https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev/';
+          const a=await fetch(url,{signal:AbortSignal.timeout(12000)});
+          const t=await a.text();
+          const b=await fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)});
+          if(a.status!==200 || t.trim()!=='Discord GPT Relay loop-v1 ready.' || b.status!==401)
+            throw Error('Loop Worker and signed interaction handler not ready. Cron remains disabled.');
+          NODE
+      - name: Activate one-minute Cloudflare Cron trigger only after verification
+        run: npx --yes wrangler@4 triggers deploy --config wrangler.loop.toml
+      - name: Reminder
+        run: echo 'Cron enabled. No AI work will occur until the authorized owner explicitly issues /loop. One active job, max 4 claimed model calls.'
