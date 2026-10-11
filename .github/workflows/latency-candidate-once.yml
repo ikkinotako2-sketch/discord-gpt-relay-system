@@ -1,0 +1,47 @@
+name: Latency Candidate Inactive Upload (One Shot)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release-candidates/latency-preview-v1.txt'
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-version-upload
+  cancel-in-progress: false
+jobs:
+  upload:
+    if: ${{ github.event.head_commit.message == 'Trigger one-shot inactive latency preview upload' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify one-shot release marker and exact worker
+        run: |
+          test "$(cat release-candidates/latency-preview-v1.txt)" = 'upload-inactive-only: latency-v1' || exit 1
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.toml || exit 1
+          grep -Fxq 'keep_vars = true' wrangler.toml || exit 1
+          grep -Fxq 'binding = "AI"' wrangler.toml || exit 1
+          grep -Fq 'required = [ "DISCORD_PUBLIC_KEY" ]' wrangler.toml || exit 1
+      - name: Test candidate offline
+        run: node --test relay.test.mjs worker-relay.test.mjs
+      - name: Build without deployment
+        run: npx --yes wrangler@4 deploy --dry-run --config wrangler.toml --outdir /tmp/plm-isolated-discord-latency-v1
+      - name: Verify Cloudflare target
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Missing API token'; exit 1; }
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534' || { echo 'Account mismatch'; exit 1; }
+      - name: Upload version without changing traffic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@4 versions upload --config wrangler.toml --message "Latency v1 preview only; not promoted"
+      - name: Confirm upload completed
+        run: echo 'Only an inactive Cloudflare Worker version was uploaded. Production was NOT changed.'
