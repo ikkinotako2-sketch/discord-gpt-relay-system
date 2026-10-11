@@ -1,5 +1,7 @@
-# STAGING ONLY. Not activated and not referenced by current production pipeline.
-# Dedicated Discord Relay Lab D1 created by account owner; migration and owner secret still require verification.
+# Production loop configuration source for the separately versioned Worker.
+# Production version aecc9c29-dbef-4abb-8036-3fd3bfbacc23 was verified live.
+# Changing this file does NOT redeploy the live Worker; future changes require an explicit guarded release.
+# Dedicated Discord Relay Lab D1 table and required owner-secret presence were verified.
 # Never use a Project Love Machine D1 ID or Cloudflare database.
 name = "steep-glitter-b5cddiscord-ai-relay-lab"
 main = "worker-loop.mjs"
