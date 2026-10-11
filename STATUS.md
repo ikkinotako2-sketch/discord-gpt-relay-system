@@ -1,5 +1,23 @@
 # AI Relay Lab — verified status (2026-10-11)
 
+## Stage 3 — all GPT-accessible development completed (2026-10-11)
+
+**STATUS: GITHUB_IMPLEMENTED / 55_TESTS_PASS / D1_AND_OPERATOR_CONFIG_BLOCKED / LIVE_NOT_UPDATED.**
+
+- Dedicated D1 adapter `loop-d1.mjs` with single active job, atomic step claims, stop, expiry, no automatic retry and 24-hour cleanup.
+- Staged Worker `worker-loop.mjs` supporting owner-only `/loop`, `/loop-status`, `/loop-stop`, one AI operation per scheduled tick, preserving `/ask` and `/relay`.
+- Staged isolated database schema `db/migrations/0001_discord_loop_jobs.sql` (NOT applied anywhere).
+- Staged `wrangler.loop.toml` with a **placeholder new D1 UUID**; it is intentionally invalid until the user creates `discord-relay-loop-state`.
+- Staged manual, guarded GitHub workflows `loop-upload.yml`, `loop-release.yml`, `register-loop-commands.yml`, `loop-enable-cron.yml`. All gated, none executed.
+- **GitHub CI run 38145019044: 55/55 PASS** (SQLite persistence + Discord signed interaction tests).
+- **Not deployed**: Production remains latency-v1 `f50669d7-7685-4da1-b2e5-567ae7526922`, with `/ask` and single-pass `/relay`.
+- **Blockers requiring account owner**: create new Discord-only D1; apply migration in that NEW DB; set Cloudflare `DISCORD_ALLOWED_USER_ID` in the existing Worker. Do not touch PLM.
+- Exact minimal user steps and safe release path: `docs/LOOP_LAUNCH_CHECKLIST.md`.
+- No API billed GPT model, unlimited loop, or consumer ChatGPT cross-chat automation has been created.
+
+---
+
+
 ## Stage 2 development — 2026-10-11 (GitHub only; NOT live)
 
 - Automatic finite cycle code `loop-core.mjs`: **planner A → builder B → planner A (prior builder output) → builder B**, maximum two rounds / four model calls.
