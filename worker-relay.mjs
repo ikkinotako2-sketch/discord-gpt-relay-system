@@ -2,6 +2,13 @@ import { relayOnce } from './relay.mjs';
 
 const MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const DISCORD_API = 'https://discord.com/api/v10';
+// Lower output ceilings reduce worst-case generated tokens, not guaranteed latency.
+const MAX_REPLY_TOKENS = Object.freeze({ planner: 260, builder: 320, ask: 240 });
+
+function logModelLatency(role, startedAt) {
+  // Log only aggregate wall-clock duration and role: no prompts, outputs, tokens or user IDs.
+  console.log(JSON.stringify({ event: 'workers_ai_timing', role, duration_ms: Math.max(0, Date.now() - startedAt) }));
+}
 
 function hexBytes(hex, count) {
   if (typeof hex !== 'string' || hex.length !== count * 2 || !/^[0-9a-f]+$/i.test(hex)) return null;
@@ -34,7 +41,13 @@ function promptFor(role, task, context) {
 
 export async function generateWithWorkersAI(env, { role, task, context }) {
   if (!env.AI?.run) throw new Error('AI binding unavailable');
-  const result = await env.AI.run(MODEL, { messages: promptFor(role, task, context), max_tokens: 450 });
+  const startedAt = Date.now();
+  let result;
+  try {
+    result = await env.AI.run(MODEL, { messages: promptFor(role, task, context), max_tokens: MAX_REPLY_TOKENS[role] ?? 320 });
+  } finally {
+    logModelLatency(role, startedAt);
+  }
   if (typeof result?.response !== 'string') throw new Error('Invalid model response');
   return result.response;
 }
@@ -45,13 +58,19 @@ export async function handleAsk(interaction, env) {
     return '質問は1〜1000文字で入力してください。';
   }
   if (!env.AI?.run) throw new Error('AI binding unavailable');
-  const result = await env.AI.run(MODEL, {
+  const startedAt = Date.now();
+  let result;
+  try {
+    result = await env.AI.run(MODEL, {
     messages: [
       { role: 'system', content: 'あなたは親切で正確な日本語AIアシスタントです。不明なことは不明と答えます。' },
       { role: 'user', content: question },
     ],
-    max_tokens: 350,
-  });
+    max_tokens: MAX_REPLY_TOKENS.ask,
+    });
+  } finally {
+    logModelLatency('ask', startedAt);
+  }
   if (typeof result?.response !== 'string' || !result.response.trim()) {
     throw new Error('Invalid model response');
   }
@@ -64,12 +83,14 @@ export async function handleRelay(interaction, env) {
     return 'タスクは1〜1000文字で入力してください。';
   }
   const runId = `d${interaction.id}`;
+  const startedAt = Date.now();
   const result = await relayOnce({
     runId, task, maxIterations: 3,
     generate: (input) => generateWithWorkersAI(env, input),
   });
   return [
     `実験run: ${runId}`,
+    `AI処理：約${((Date.now() - startedAt) / 1000).toFixed(1)}秒（配信時間を除く）`,
     '【AI A：計画】', result.stages[0].output,
     '【AI B：実装案】', result.stages[1].output,
     '※2回のAI処理を使った試作です。実際のChatGPTチャット間の接続ではありません。',
