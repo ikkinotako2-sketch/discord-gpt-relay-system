@@ -1,0 +1,27 @@
+[
+  {
+    "name": "loop",
+    "description": "AI A→Bの自動改善を最大2周実行（実験管理者のみ）",
+    "type": 1,
+    "options": [
+      {
+        "name": "task",
+        "description": "作業内容（1～1000文字）",
+        "type": 3,
+        "required": true,
+        "min_length": 1,
+        "max_length": 1000
+      }
+    ]
+  },
+  {
+    "name": "loop-status",
+    "description": "自動改善ループの進捗と最終結果を確認",
+    "type": 1
+  },
+  {
+    "name": "loop-stop",
+    "description": "進行中の自動改善ループを停止",
+    "type": 1
+  }
+]
