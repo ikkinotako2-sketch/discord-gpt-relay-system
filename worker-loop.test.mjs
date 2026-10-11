@@ -101,7 +101,7 @@ test('D1-backed health rejects missing DB, then confirms uniquely migrated loop 
   assert.equal((await worker.fetch(req,{},{})).status,503);
   const res=await worker.fetch(req,envBase(db()),{});
   assert.equal(res.status,200);
-  assert.equal(await res.text(),'Discord GPT Relay loop-v1 ready.');
+  assert.equal(await res.text(),'Discord GPT Relay loop-v2 task-focus ready.');
 });
 test('rejects missing D1 and missing AI without starting jobs',async()=>{
   const e=interaction('loop',owner,[{name:'task',value:'Example'}]);
