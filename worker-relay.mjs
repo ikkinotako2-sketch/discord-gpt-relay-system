@@ -39,6 +39,25 @@ export async function generateWithWorkersAI(env, { role, task, context }) {
   return result.response;
 }
 
+export async function handleAsk(interaction, env) {
+  const question = interaction.data?.options?.find(x => x.name === 'question')?.value;
+  if (typeof question !== 'string' || !question.trim() || question.length > 1000) {
+    return '質問は1〜1000文字で入力してください。';
+  }
+  if (!env.AI?.run) throw new Error('AI binding unavailable');
+  const result = await env.AI.run(MODEL, {
+    messages: [
+      { role: 'system', content: 'あなたは親切で正確な日本語AIアシスタントです。不明なことは不明と答えます。' },
+      { role: 'user', content: question },
+    ],
+    max_tokens: 350,
+  });
+  if (typeof result?.response !== 'string' || !result.response.trim()) {
+    throw new Error('Invalid model response');
+  }
+  return result.response.slice(0, 1900);
+}
+
 export async function handleRelay(interaction, env) {
   const task = interaction.data?.options?.find(x => x.name === 'task')?.value;
   if (typeof task !== 'string' || task.length > 1000 || !task.trim()) {
@@ -79,17 +98,20 @@ export default {
     let event;
     try { event = JSON.parse(raw); } catch { return new Response('Invalid JSON', { status: 400 }); }
     if (event.type === 1) return Response.json({ type: 1 });
-    if (event.type === 2 && event.data?.name === 'relay') {
+    if (event.type === 2 && ['relay', 'ask'].includes(event.data?.name)) {
       ctx.waitUntil((async () => {
         let message;
-        try { message = await handleRelay(event, env); }
+        try {
+          message = event.data.name === 'ask'
+            ? await handleAsk(event, env)
+            : await handleRelay(event, env);
+        }
         catch (err) { console.error('Relay failed', String(err)); message = '引き継ぎ処理が失敗しました。管理者に確認してください。'; }
         await respondToDiscord(event, env, message);
       })());
       return Response.json({ type: 5, data: { flags: 64 } });
     }
-    // This candidate intentionally handles only /relay.
-    // Keep the existing /ask handler when integrating with the live Worker.
+    // The one-time /__register_ask registration endpoint is intentionally absent.
     return Response.json({ type: 4, data: { content: 'このコマンドには未対応です。', flags: 64 } });
   },
 };
