@@ -52,7 +52,7 @@ export async function handleLoopCommand(event,env,now=Date.now()) {
 // Process one single AI call per cron tick. No retry on unknown outcomes.
 // Model calls occur ONLY for an explicitly accepted /loop job.
 export async function runOneScheduledLoopStep(env,{now=Date.now(),leaseOwner=crypto.randomUUID()}={}) {
-  if(!env.LOOP_DB?.prepare || !env.AI?.run || !/^\\d{15,22}$/.test(String(env.DISCORD_ALLOWED_USER_ID ?? ''))) throw Error('Missing loop bindings or operator');
+  if(!env.LOOP_DB?.prepare || !env.AI?.run || !/^\d{15,22}$/.test(String(env.DISCORD_ALLOWED_USER_ID ?? ''))) throw Error('Missing loop bindings or operator');
   const claim=await claimOneLoopStep(env.LOOP_DB,now,leaseOwner);
   if(!claim)return {status:'idle'};
   const context=claim.next_role==='planner'
