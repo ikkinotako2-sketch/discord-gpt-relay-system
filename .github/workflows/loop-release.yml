@@ -1,11 +1,9 @@
-name: Loop Release (Manual, Guarded Rollback)
+name: Loop Production Release (Approved One Shot)
 on:
-  workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Type DEPLOY-LOOP (changes existing production Worker)'
-        required: true
-        type: string
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/loop-production-approved.once'
 permissions:
   contents: read
 concurrency:
@@ -13,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: ${{ github.event.head_commit.message == 'Deploy one-time approved Discord loop candidate' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
@@ -20,7 +19,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       TARGET_VERSION: aecc9c29-dbef-4abb-8036-3fd3bfbacc23
-      CONFIRM: ${{ inputs.confirm }}
+      CONFIRM: DEPLOY-LOOP
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,7 +27,8 @@ jobs:
           node-version: '22'
       - name: Confirm exact target and credentials before ANY production write
         run: |
-          test "$CONFIRM" = 'DEPLOY-LOOP' || { echo 'Confirmation missing'; exit 1; }
+          test "$CONFIRM" = 'DEPLOY-LOOP' || exit 1
+          test "$(cat preflight/loop-production-approved.once)" = "APPROVED_ONCE:aecc9c29-dbef-4abb-8036-3fd3bfbacc23" || { echo 'Release marker mismatch'; exit 1; }
           test -n "$CLOUDFLARE_API_TOKEN" || { echo 'Cloudflare Token absent'; exit 1; }
           test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534' || { echo 'Wrong account'; exit 1; }
           [[ "$TARGET_VERSION" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || exit 1
