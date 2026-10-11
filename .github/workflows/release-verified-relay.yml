@@ -6,14 +6,6 @@ on:
         description: 'Type RELEASE to acknowledge production traffic will change'
         required: true
         type: string
-      worker:
-        description: 'Type exact target Worker name'
-        required: true
-        type: string
-      version:
-        description: 'Type exact tested Cloudflare version ID'
-        required: true
-        type: string
 permissions:
   contents: read
 concurrency:
@@ -21,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: ${{ inputs.approve == 'RELEASE' && inputs.worker == 'steep-glitter-b5cddiscord-ai-relay-lab' && inputs.version == '82537b42-90d1-424d-92d4-9dcc5b1309de' }}
+    if: ${{ inputs.approve == 'RELEASE' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
