@@ -1,6 +1,17 @@
 # AI Relay Lab — verified status (2026-10-11)
 
-## CURRENT: WORKER_LIVE / DISCORD_RELAY_REGISTERED / END_TO_END_MANUAL_TEST_PENDING
+## CURRENT: WORKER_LIVE / DISCORD_RELAY_REGISTERED / END_TO_END_MANUAL_TEST_PASS
+
+User confirmed that both `/ask` and `/relay` returned successful answers in the AI Relay Lab Test Discord server. The user reported noticeable response latency, but no seconds were measured; the two sequential model calls are a plausible reason for delay.
+
+### Latency improvement staged in GitHub, NOT deployed
+- `worker-relay.mjs` now has lower per-stage output limits: planner 260, builder 320, /ask 240 (previous 450 and 350); lower maximum output can reduce worst-case inference duration, but speedup is NOT guaranteed.
+- Add privacy-safe per-AI-stage timing logs (role and duration only) and total approximate AI time in `/relay` answers.
+- `worker-relay.test.mjs` checks the caps and elapsed-time display.
+- **The live Worker still runs the previously deployed version** `82537b42-90d1-424d-92d4-9dcc5b1309de`. Do NOT claim staged code is active.
+- Releasing any updated version requires a separate dry-run, inactive upload, then explicit authorized promotion with validation and rollback. Do not use a blind wrangler deploy.
+
+
 
 ### Verified evidence (GitHub Actions)
 - **Release 38138045023:** preflight passed; Cloudflare production switched to version `82537b42-90d1-424d-92d4-9dcc5b1309de` at 100%. Immediate health check failed due to a missing expected response text, so the workflow ended FAILURE **after the production write**; Discord command registration was skipped.
@@ -9,9 +20,8 @@
 - The recovery run **did not redeploy the Worker**. It only checked live behavior and registered the command.
 - Public repository: `ikkinotako2-sketch/discord-gpt-relay-system`.
 
-### Required next checks
-1. In the **AI Relay Lab Test** Discord server, run `/ask question: こんにちは`; verify an AI reply appears.
-2. Run `/relay task: 簡単なWebサイトの作成計画を考えて`; verify both 【AI A：計画】 and 【AI B：実装案】 appear. Global Discord commands may take some time to propagate.
+### Next checks
+1. The user has confirmed `/ask` and `/relay` both returned; measure actual response time after the optional new version is safely deployed.
 3. If either command fails, collect its response and the relevant Cloudflare Worker logs **without exposing tokens or private data**; do not rerun a production deployment blindly.
 4. **Remove or rotate the previously exposed Cloudflare SETUP_KEY**. The new Worker code does not contain the temporary registration route `/__register_ask`. The old Cloudflare `DISCORD_BOT_TOKEN` is no longer needed by the current runtime, provided the command registration has succeeded. **Preserve `DISCORD_PUBLIC_KEY` and Workers AI binding `AI`.** Secret changes can affect deployed versions; verify `/ask` and `/relay` afterward.
 5. Later: implement durable and authorized handoff among **actual GPT-powered agents**, state/retry, monitoring, and opt-in external integrations. The current implementation is *only* two sequential Cloudflare Workers AI calls to a Llama model, **not** consumer ChatGPT sessions, and is not a self-sustaining autonomous network.
