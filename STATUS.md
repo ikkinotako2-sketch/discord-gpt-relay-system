@@ -7,6 +7,12 @@
 - **Do not deploy** the loop Worker or run loop-upload/release yet. Await D1 console schema apply and operator `DISCORD_ALLOWED_USER_ID` secret configuration.
 - Project Love Machine database remains untouched.
 
+### D1 migration update — Cloudflare Console screenshot (2026-10-11)
+- Screenshot of the dedicated `discord-relay-loop-state` console shows the SQL creating `relay_loop_jobs` and three indexes was run, with Cloudflare saying "このクエリーは正常に実行されました".
+- The query `SELECT COUNT(*) AS total FROM relay_loop_jobs;` has **not yet been shown** as verified, and current row count remains unconfirmed.
+- `wrangler.loop.toml` is pinned to that Discord-only D1 UUID. Keep `loop-upload.yml`, `loop-release.yml`, command registration and Cron deployment **unexecuted** until the table count is checked and the `DISCORD_ALLOWED_USER_ID` Worker secret is configured.
+- Existing /ask and /relay production Worker remains unchanged by the SQL migration.
+
 ## Stage 3 — all GPT-accessible development completed (2026-10-11)
 
 **STATUS: GITHUB_IMPLEMENTED / 55_TESTS_PASS / D1_AND_OPERATOR_CONFIG_BLOCKED / LIVE_NOT_UPDATED.**
