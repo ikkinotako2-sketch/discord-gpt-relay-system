@@ -1,6 +1,16 @@
 # Discord AI Relay Lab — verified production status (2026-10-12)
 
-## CURRENT: BOUNDED_LOOP_LIVE / CRON_ENABLED / END_TO_END_DISCORD_TEST_PENDING
+## CURRENT: BOUNDED_LOOP_LIVE / CRON_ENABLED / FIRST_END_TO_END_DISCORD_TEST_PASS
+
+### First real Discord-to-Cron-to-D1 loop: PASS (user screenshots 2026-10-12)
+- Discord `/loop-status` initially showed no run history.
+- `/loop` returned `受付完了` with run ID `d1558987462942916668`.
+- At 08:42 local screenshot, `/loop-status` showed **queued, calls_used 3/4**.
+- At 08:43 local screenshot, `/loop-status` showed **completed, calls_used 4/4, final artifact present**. This provides end-to-end evidence of successfully persisting and advancing all four claimed AI operations via the scheduled Worker, and reaching completion without manual retries.
+- The final artifact's visible topic concerns safe action when in a hurry, whereas the *suggested example prompt* was to improve a short greeting. The actual submitted `/loop task` field is not visible in screenshots, so **prompt-following mismatch is only a possibility, not proven**. Confirm actual input before diagnosing.
+- `/loop-stop` has not been live-tested; quota/latency/performance under load not verified.
+- No official GPT model used: Cloudflare Workers AI Llama, bounded 2-round A/B cycle only.
+
 
 ### Verified GitHub Actions evidence
 - **Production release SUCCESS:** [38181913277](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38181913277). Offline tests **55/55 PASS**. The existing Worker `steep-glitter-b5cddiscord-ai-relay-lab` promoted exact pre-uploaded version **`aecc9c29-dbef-4abb-8036-3fd3bfbacc23`** to **100%**.
@@ -16,7 +26,7 @@
 - Cloudflare Cron runs once per minute; at most one model call per scheduled invocation. It periodically checks D1 even when no work is queued, but **no AI inference call is made when idle**.
 - Dedicated D1 database `discord-relay-loop-state`, UUID `d80b08a4-0ff7-4320-9575-0d3c55cf7aba`, **not** the Project Love Machine D1. User screenshot verified the `relay_loop_jobs` table exists with zero rows before this new production deployment.
 - Includes stop-request semantics, atomic job claim, per-run call bounds, 24-hour retention, no blind retries on unknown jobs, and metadata-only diagnostic logs.
-- **IMPORTANT:** Production HTTP health and mocked/offline tests do not prove the complete Discord-to-Cron-to-D1 four-step loop has finished successfully. This is still awaiting the user's *first live integration test*.
+- **IMPORTANT:** The first live Discord-to-Cron-to-D1 four-step test is user-verified PASS, but repeatability, prompt adherence and STOP remain unverified.
 - Uses **Cloudflare Workers AI Llama**, **not ChatGPT web sessions or OpenAI GPT API**. It is a bounded, explicitly started AI-agent loop, **not an infinite self-running GPT network**. Cloudflare free-plan quotas remain applicable.
 
 ### Immediate user verification needed
