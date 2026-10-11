@@ -2,18 +2,30 @@
 
 ## CURRENT: BOUNDED_LOOP_LIVE / CRON_ENABLED / FIRST_END_TO_END_DISCORD_TEST_PASS
 
+### Confirmed response-topic mismatch and tested repair (2026-10-12)
+- User explicitly confirmed the original task in the first real loop was **`短い挨拶文を改善して`**.
+- The actual final Discord artifact was unrelated advice about being in a hurry. **The first 4/4 run was a systems/automation SUCCESS but a user-task QUALITY FAILURE**. Do not count it as a fully correct answer.
+- GitHub-only fixes: `loop-quality.mjs` reinforces the exact original request in both planning/building model calls, treats intermediate drafts as reference only, and conservatively recognizes usable Japanese greeting phrases in greeting-specific final answers. No additional AI/model calls or retries.
+- `worker-loop.mjs` now fails closed with `TASK_MISMATCH` instead of incorrectly recording `completed` when the final greeting artifact obviously lacks any greeting. `loop-d1.mjs` persists this reason; owner-only `/loop-status` displays the quality failure and the original task.
+- The deterministic validator is **narrow and heuristic**, not a semantic guarantee for arbitrary tasks; a greeting phrase in an unrelated answer or a valid unusual greeting might still evade/misfire the check.
+- New regression tests simulate the screenshot-like off-topic final output (FAILED, no retry) and a correct greeting result (COMPLETED).
+- GitHub Actions **38186038448**, 63/63 PASS for the quality fix; subsequent unique-health-marker tests also passed on GitHub.
+- **NOT LIVE.** The known working production Worker is still `aecc9c29-dbef-4abb-8036-3fd3bfbacc23`; current Cron and Discord slash commands are unchanged.
+- A new one-shot inactive-upload workflow was attempted but rejected before jobs began due to GitHub workflow validation; **no new Cloudflare version was uploaded**. It was retired to avoid repeated failures. Manual guarded `.github/workflows/loop-upload.yml` remains available for an explicitly authorized later staging operation, after current-version preflight.
+- A v2 task-focus public health marker is staged in GitHub to distinguish any future release. **Do not deploy without exact-version and rollback safeguards.**
+
 ### Follow-up quality improvement staged (GitHub only; NOT deployed)
 - `getLatestLoop` now selects the persisted original task and private owner-only `/loop-status` will display `元の依頼` alongside progress and final answer. This allows users to spot topic drift without disclosing the task in logs.
 - Code and test committed; GitHub Actions run **38185482964**: **55/55 PASS**.
 - This status visibility improvement is **not** in the current live Worker version `aecc9c29-dbef-4abb-8036-3fd3bfbacc23`; separate approved staging and rollout would be needed.
-- Screenshot output topic may or may not match the actual user's submitted task; the Discord command input was not shown, so do not report confirmed prompt drift.
+- User later explicitly confirmed the original task was to improve a short greeting, therefore the actual unrelated output is a confirmed prompt-following failure.
 
 ### First real Discord-to-Cron-to-D1 loop: PASS (user screenshots 2026-10-12)
 - Discord `/loop-status` initially showed no run history.
 - `/loop` returned `受付完了` with run ID `d1558987462942916668`.
 - At 08:42 local screenshot, `/loop-status` showed **queued, calls_used 3/4**.
 - At 08:43 local screenshot, `/loop-status` showed **completed, calls_used 4/4, final artifact present**. This provides end-to-end evidence of successfully persisting and advancing all four claimed AI operations via the scheduled Worker, and reaching completion without manual retries.
-- The final artifact's visible topic concerns safe action when in a hurry, whereas the *suggested example prompt* was to improve a short greeting. The actual submitted `/loop task` field is not visible in screenshots, so **prompt-following mismatch is only a possibility, not proven**. Confirm actual input before diagnosing.
+- User explicitly confirmed the submitted task was to improve a short greeting. The unrelated final artifact is confirmed topic drift; count only infrastructure completion as successful.
 - `/loop-stop` has not been live-tested; quota/latency/performance under load not verified.
 - No official GPT model used: Cloudflare Workers AI Llama, bounded 2-round A/B cycle only.
 
