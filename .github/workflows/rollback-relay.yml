@@ -1,9 +1,9 @@
-name: Emergency Restore Previous Discord Worker (Manual Only)
+name: Emergency Restore Last Working Relay (Manual Only)
 on:
   workflow_dispatch:
     inputs:
       confirm_rollback:
-        description: 'Type RESTORE-PREVIOUS to restore the exact pre-release Worker version'
+        description: 'Type RESTORE-PREVIOUS to restore the last user-tested /ask and /relay version'
         required: true
         type: string
 permissions:
@@ -28,8 +28,8 @@ jobs:
       - name: Restore the exact version that was live immediately before release
         run: |
           npx --yes wrangler@4 versions deploy \
-            "d693825b-fb22-4fdf-a55e-a7f511f4ee29@100%" \
+            "82537b42-90d1-424d-92d4-9dcc5b1309de@100%" \
             --name steep-glitter-b5cddiscord-ai-relay-lab \
-            --message "Emergency rollback to pre-relay version" --yes
+            --message "Restore last user-tested Discord relay version" --yes
       - name: Record deployment versions
         run: npx --yes wrangler@4 deployments list --name steep-glitter-b5cddiscord-ai-relay-lab
