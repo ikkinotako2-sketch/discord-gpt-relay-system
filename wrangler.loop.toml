@@ -1,0 +1,23 @@
+# STAGING ONLY. Not activated and not referenced by current production pipeline.
+# Create a NEW D1 database dedicated to Discord Relay Lab and insert its actual ID.
+# Never use a Project Love Machine D1 ID or Cloudflare database.
+name = "steep-glitter-b5cddiscord-ai-relay-lab"
+main = "worker-loop.mjs"
+compatibility_date = "2026-10-11"
+workers_dev = true
+keep_vars = true
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "LOOP_DB"
+database_name = "discord-relay-loop-state"
+database_id = "REPLACE_WITH_NEW_DISCORD_ONLY_D1_DATABASE_ID"
+migrations_dir = "db/migrations"
+
+[triggers]
+crons = ["*/1 * * * *"]
+
+[secrets]
+required = [ "DISCORD_PUBLIC_KEY", "DISCORD_ALLOWED_USER_ID" ]
