@@ -1,3 +1,22 @@
+# Incident update — 2026-10-11, release run 38138045023
+
+**STATUS: LIVE_PRODUCTION_SWITCHED / HEALTH_UNVERIFIED / RELAY_UNREGISTERED**
+
+Observed GitHub Actions steps:
+- Offline tests: SUCCESS.
+- GitHub Bot Token authentication and exact app ID check: SUCCESS.
+- Cloudflare production deployment: SUCCESS, `82537b42-90d1-424d-92d4-9dcc5b1309de` at 100%.
+- Immediately following GET health check: FAILED. The curl request itself returned successfully; the body did not contain the expected string. Exact received body was NOT logged. A propagation delay is possible but unverified.
+- Discord /relay registration: SKIPPED.
+- Production version immediately before switch: `d693825b-fb22-4fdf-a55e-a7f511f4ee29`.
+- The previous live version may contain the temporary /__register_ask route and earlier exposed SETUP_KEY. Handle carefully.
+
+**Do not rerun the partially successful release.** Use `.github/workflows/register-relay.yml` to check the live Worker (GET and unsigned POST requiring HTTP 401) before registering /relay. This changes only Discord command registration, not Worker code. Run it manually with `confirm_command=register-relay`.
+
+If live Worker remains invalid or /ask fails, use `.github/workflows/rollback-relay.yml` with `confirm_rollback=RESTORE-PREVIOUS` only after reviewing the failed checks. Rollback is a production write and can restore the older temporary setup route; rotate or remove exposed secrets after recovery.
+
+---
+
 # Current project status — 2026-10-11
 
 ## Fixed ultimate goal
