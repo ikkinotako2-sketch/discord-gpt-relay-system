@@ -1,0 +1,2 @@
+Explicitly trigger exactly one inactive Cloudflare Worker version upload after successful read-only baseline verification.
+No production deployment. No Cron change.
