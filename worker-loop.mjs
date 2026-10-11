@@ -81,7 +81,7 @@ export async function runOneScheduledLoopStep(env,{now=Date.now(),leaseOwner=cry
 export default {
   async fetch(request,env,ctx) {
     if(request.method==='GET') {
-      if(!env.LOOP_DB?.prepare)return new Response('Loop D1 not configured',{status:503});
+      if(!env.LOOP_DB?.prepare || !env.AI?.run || !/^\d{15,22}$/.test(String(env.DISCORD_ALLOWED_USER_ID ?? ''))) return new Response('Loop configuration incomplete',{status:503});
       try {
         await env.LOOP_DB.prepare('SELECT run_id FROM relay_loop_jobs LIMIT 1').first();
         return new Response('Discord GPT Relay loop-v1 ready.');
