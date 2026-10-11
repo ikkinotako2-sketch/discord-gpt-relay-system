@@ -94,13 +94,27 @@ test('unsigned Discord requests get 401 and cannot reach D1',async()=>{
   assert.equal(result.status,401);
   assert.equal(await getLatestLoop(d,owner),null);
 });
-test('public GET health remains compatible with legacy /ask and /relay Worker',async()=>{
-  const res=await worker.fetch(new Request('https://test.invalid/',{method:'GET'}),{},{});
+test('D1-backed health rejects missing DB, then confirms uniquely migrated loop worker',async()=>{
+  const req=new Request('https://test.invalid/',{method:'GET'});
+  assert.equal((await worker.fetch(req,{},{})).status,503);
+  const res=await worker.fetch(req,{LOOP_DB:db()},{});
   assert.equal(res.status,200);
-  assert.equal(await res.text(),'Discord GPT Relay ready (latency-v1).');
+  assert.equal(await res.text(),'Discord GPT Relay loop-v1 ready.');
 });
 test('rejects missing D1 and missing AI without starting jobs',async()=>{
   const e=interaction('loop',owner,[{name:'task',value:'Example'}]);
   assert.match(await handleLoopCommand(e,{DISCORD_ALLOWED_USER_ID:owner}),/D1/);
   assert.match(await handleLoopCommand(e,{DISCORD_ALLOWED_USER_ID:owner,LOOP_DB:db()}),/AI/);
+});
+
+test('cron cannot start work without an operator allowlist',async()=>{
+  const d=db(),env=envBase(d);
+  const now=Date.now();
+  await handleLoopCommand(interaction('loop',owner,[{name:'task',value:'Example'}]),env,now);
+  delete env.DISCORD_ALLOWED_USER_ID;
+  await assert.rejects(
+    ()=>runOneScheduledLoopStep(env,{now:now+1000,leaseOwner:'blocked'}),
+    /Missing loop bindings or operator/
+  );
+  assert.equal((await getLatestLoop(d,owner)).status,'queued');
 });
