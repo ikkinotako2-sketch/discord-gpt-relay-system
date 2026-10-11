@@ -48,7 +48,7 @@ jobs:
           import fs from 'node:fs';
           const s=fs.readFileSync('/tmp/relay-deployments.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
           const ids=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
-          if(ids.at(-1)!=='f50669d7-7685-4da1-b2e5-567ae7526922')throw Error('Unexpected live version. ABORT no deployment.');
+          if(ids.at(-1)!=='b1b421c3-23fe-4a55-b8a7-db72b36848cc')throw Error('Unexpected live version. ABORT no deployment.');
           NODE
       - name: Promote explicitly approved inactive Worker version
         id: promote
@@ -78,9 +78,9 @@ jobs:
         if: ${{ failure() && steps.promote.outcome == 'success' }}
         run: |
           npx --yes wrangler@4 versions deploy \
-            "f50669d7-7685-4da1-b2e5-567ae7526922@100%" \
+            "b1b421c3-23fe-4a55-b8a7-db72b36848cc@100%" \
             --name steep-glitter-b5cddiscord-ai-relay-lab \
-            --message "Restore latency-v1 following loop rollout health failure" --yes
+            --message "Restore last read-only-verified production version after loop health failure" --yes
       - name: Next staged steps (no Cron or slash command registration yet)
         if: ${{ success() }}
         run: echo 'Loop Worker is healthy. Register loop slash commands separately, then enable Cron. /ask and /relay must also be retested.'
