@@ -11,7 +11,10 @@ test('two real AI binding invocations transmit plan to builder', async () => {
   const response = await handleRelay({ id: '123', data: { options: [{ name: 'task', value: '安全なWebアプリを計画' }] } }, env);
   assert.equal(calls.length, 2);
   assert.match(calls[1].messages[1].content, /ステップ1を行う/);
+  assert.equal(calls[0].max_tokens, 260);
+  assert.equal(calls[1].max_tokens, 320);
   assert.match(response, /AI B/);
+  assert.match(response, /AI処理：約[0-9.]+秒/);
 });
 test('rejects empty task without running model', async () => {
   const text = await handleRelay({ id: '123', data: { options: [{name:'task',value:' '}]} }, {});
@@ -35,6 +38,7 @@ test('ask replies with one AI call and preserves question', async () => {
   assert.equal(response, 'こんにちは！');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].messages[1].content, 'こんにちは');
+  assert.equal(calls[0].max_tokens, 240);
 });
 test('ask rejects blank question without model call', async () => {
   const response = await handleAsk({data:{options:[{name:'question',value:''}]}}, {});
