@@ -19,7 +19,8 @@ function prettyStatus(row) {
   }[row.status] || '不明';
   const answer=row.status==='completed' && row.previous_artifact
     ? '\n【最終案】\n'+row.previous_artifact.slice(0,1100) : '';
-  return say(`run: ${row.run_id}\n状態: ${label}\n進捗: ${row.calls_used}/4 AI呼出し（最大2周）${answer}`);
+  const task = typeof row.task === 'string' ? row.task.slice(0, 180) : '未取得';
+  return say(`run: ${row.run_id}\n元の依頼: ${task}\n状態: ${label}\n進捗: ${row.calls_used}/4 AI呼出し（最大2周）${answer}`);
 }
 
 export async function handleLoopCommand(event,env,now=Date.now()) {
