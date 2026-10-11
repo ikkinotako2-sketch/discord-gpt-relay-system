@@ -39,7 +39,7 @@ jobs:
         run: |
           status="$(curl -sS -o /tmp/discord-user.json -w '%{http_code}' -H "Authorization: Bot $DISCORD_BOT_TOKEN" https://discord.com/api/v10/users/@me)"
           test "$status" = 200 || { echo "Discord authentication HTTP $status"; exit 1; }
-          node --input-type=module -e "import fs from 'node:fs'; const a=JSON.parse(fs.readFileSync('/tmp/discord-user.json','utf8')); if (!a.bot) throw Error('Token is not a Bot token')"
+          node --input-type=module -e "import fs from 'node:fs'; const a=JSON.parse(fs.readFileSync('/tmp/discord-user.json','utf8')); if (!a.bot || a.id !== '1558705011339427840') throw Error('Bot token does not belong to AI Relay Lab')"
           rm -f /tmp/discord-user.json
       - name: Capture previous deployment metadata for manual rollback
         run: npx --yes wrangler@4 deployments list --name steep-glitter-b5cddiscord-ai-relay-lab
