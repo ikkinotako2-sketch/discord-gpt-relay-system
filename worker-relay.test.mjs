@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleRelay, validDiscordRequest, generateWithWorkersAI } from './worker-relay.mjs';
+import { handleRelay, handleAsk, validDiscordRequest, generateWithWorkersAI } from './worker-relay.mjs';
 
 test('two real AI binding invocations transmit plan to builder', async () => {
   const calls = [];
@@ -22,4 +22,26 @@ test('signature rejects missing headers', async () => {
 });
 test('missing AI binding stops safely', async () => {
   await assert.rejects(() => generateWithWorkersAI({}, { role:'planner', task:'test', context:'' }), /AI binding/);
+});
+
+test('ask replies with one AI call and preserves question', async () => {
+  const calls = [];
+  const response = await handleAsk({ data: { options: [{ name: 'question', value: 'こんにちは' }] } }, {
+    AI: { run: async (_model, options) => {
+      calls.push(options);
+      return { response: 'こんにちは！' };
+    } },
+  });
+  assert.equal(response, 'こんにちは！');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].messages[1].content, 'こんにちは');
+});
+test('ask rejects blank question without model call', async () => {
+  const response = await handleAsk({data:{options:[{name:'question',value:''}]}}, {});
+  assert.match(response, /1〜1000文字/);
+});
+test('ask fails closed on invalid AI response', async () => {
+  await assert.rejects(() => handleAsk({data:{options:[{name:'question',value:'hello'}]}}, {
+    AI: {run: async()=>({response:null})},
+  }), /Invalid model response/);
 });
