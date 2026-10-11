@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
+import {generateKeyPairSync,sign} from 'node:crypto';
 import worker, {handleLoopCommand,runOneScheduledLoopStep} from './worker-loop.mjs';
 import {getLatestLoop} from './loop-d1.mjs';
 
@@ -117,4 +118,63 @@ test('cron cannot start work without an operator allowlist',async()=>{
     /Missing loop bindings or operator/
   );
   assert.equal((await getLatestLoop(d,owner)).status,'queued');
+});
+
+test('signed /loop interaction acknowledges immediately and queues one job',async()=>{
+  const d=db(),env=envBase(d);
+  const {publicKey,privateKey}=generateKeyPairSync('ed25519');
+  env.DISCORD_PUBLIC_KEY=publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex');
+  const event={...interaction('loop',owner,[{name:'task',value:'Write a short outline'}]),type:2,
+    application_id:'1558705011339427840',token:'not-a-secret-test-token'};
+  const raw=JSON.stringify(event), stamp='1234567890';
+  const signature=sign(null,Buffer.from(stamp+raw),privateKey).toString('hex');
+  const request=new Request('https://test.invalid/',{
+    method:'POST',body:raw,
+    headers:{'X-Signature-Ed25519':signature,'X-Signature-Timestamp':stamp}
+  });
+  const out=[];
+  const tasks=[];
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async(url,opts)=>{
+    out.push({url:String(url),method:opts.method,body:JSON.parse(opts.body)});
+    return new Response('{}',{status:200});
+  };
+  try {
+    const response=await worker.fetch(request,env,{waitUntil(promise){tasks.push(promise);}});
+    assert.equal(response.status,200);
+    assert.equal((await response.json()).type,5);
+    await Promise.all(tasks);
+    assert.equal((await getLatestLoop(d,owner)).status,'queued');
+    assert.equal(out.length,1);
+    assert.equal(out[0].method,'PATCH');
+    assert.match(out[0].body.content,/受付完了/);
+    assert.deepEqual(out[0].body.allowed_mentions,{parse:[]});
+  }finally {globalThis.fetch=originalFetch;}
+});
+
+test('signed /ask interaction still reaches the existing handler',async()=>{
+  const {publicKey,privateKey}=generateKeyPairSync('ed25519');
+  const key=publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex');
+  const event={...interaction('ask',owner,[{name:'question',value:'こんにちは'}]),type:2,
+    application_id:'1558705011339427840',token:'not-a-secret-test-token'};
+  const raw=JSON.stringify(event),stamp='0987654321';
+  const sig=sign(null,Buffer.from(stamp+raw),privateKey).toString('hex');
+  const request=new Request('https://test.invalid/',{method:'POST',body:raw,headers:{
+    'X-Signature-Ed25519':sig,'X-Signature-Timestamp':stamp
+  }});
+  const calls=[], tasks=[], oldFetch=globalThis.fetch;
+  globalThis.fetch=async(url,opts)=>{
+    calls.push({url:String(url),body:JSON.parse(opts.body)});
+    return new Response('{}',{status:200});
+  };
+  try{
+    const result=await worker.fetch(request,{
+      DISCORD_PUBLIC_KEY:key,
+      AI:{run:async()=>({response:'既存のaskも正常'})}
+    },{waitUntil(promise){tasks.push(promise)}});
+    assert.equal((await result.json()).type,5);
+    await Promise.all(tasks);
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].body.content,'既存のaskも正常');
+  }finally{globalThis.fetch=oldFetch;}
 });
