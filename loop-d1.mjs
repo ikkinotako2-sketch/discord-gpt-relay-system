@@ -35,7 +35,7 @@ export async function createDurableLoop(db, { runId, requesterId, task, now = Da
 export async function getLatestLoop(db, requesterId) {
   dbRequired(db);
   if (!isSnowflake(requesterId)) throw TypeError('Invalid requester');
-  return db.prepare(`SELECT run_id,status,next_role,round_number,max_rounds,calls_used,
+  return db.prepare(`SELECT run_id,task,status,next_role,round_number,max_rounds,calls_used,
     revision,stop_requested,previous_artifact,last_error_code,created_at,updated_at
     FROM relay_loop_jobs WHERE requester_discord_id=? ORDER BY created_at DESC LIMIT 1`)
     .bind(requesterId).first();
