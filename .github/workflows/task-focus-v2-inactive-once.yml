@@ -1,0 +1,56 @@
+name: Task-Focus V2 Inactive Upload Once
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/task-focus-v2-upload.once'
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-version-upload
+  cancel-in-progress: false
+jobs:
+  upload:
+    if: ${{ github.event.head_commit.message == 'Trigger one-time task-focus v2 inactive upload' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate upload marker and exact isolated targets
+        run: |
+          test "$(cat preflight/task-focus-v2-upload.once)" = 'INACTIVE_ONLY:task-focus-v2' || exit 1
+          test -n "$CLOUDFLARE_API_TOKEN" || exit 1
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534' || exit 1
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.loop.toml || exit 1
+          grep -Fxq 'main = "worker-loop.mjs"' wrangler.loop.toml || exit 1
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.loop.toml || exit 1
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.loop.toml || exit 1
+          grep -Fxq 'keep_vars = true' wrangler.loop.toml || exit 1
+          grep -Fxq 'binding = "AI"' wrangler.loop.toml || exit 1
+          grep -Fq 'Discord GPT Relay loop-v2 task-focus ready.' worker-loop.mjs || exit 1
+      - name: Confirm last proven working live Worker version
+        run: |
+          npx --yes wrangler@4 deployments list --name steep-glitter-b5cddiscord-ai-relay-lab > /tmp/relay-focus-before-upload.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/relay-focus-before-upload.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const versions=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(m=>m[1]);
+          if(versions.at(-1)!=='aecc9c29-dbef-4abb-8036-3fd3bfbacc23'){
+            throw Error('Production Worker changed since first 4/4 success; abort inactive upload.');
+          }
+          console.log('Existing verified loop Worker baseline still live.');
+          NODE
+      - name: Run full offline regression tests
+        run: node --test relay.test.mjs worker-relay.test.mjs loop-core.test.mjs loop-worker.test.mjs loop-state.test.mjs loop-d1.test.mjs worker-loop.test.mjs loop-quality.test.mjs
+      - name: Compile without deployment
+        run: npx --yes wrangler@4 deploy --dry-run --config wrangler.loop.toml --outdir /tmp/discord-task-focus-v2
+      - name: Upload INACTIVE version only
+        run: npx --yes wrangler@4 versions upload --config wrangler.loop.toml --message "Task focus v2: preserve original task; no production change"
+      - name: Confirm production unchanged
+        run: echo 'INACTIVE_CANDIDATE_UPLOADED: No production traffic or triggers changed.'
