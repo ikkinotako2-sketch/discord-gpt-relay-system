@@ -1,5 +1,13 @@
 # AI Relay Lab — verified status (2026-10-11)
 
+### D1 migration verified — 2026-10-11
+- User screenshot confirms `SELECT COUNT(*) AS total FROM relay_loop_jobs;` returned **total = 0** in the new Discord-only D1 Console.
+- This verifies that `relay_loop_jobs` exists and starts empty. The creation SQL for its three indexes previously returned success as well.
+- Dedicated D1 ID is configured in `wrangler.loop.toml`; it remains **NOT bound to live production**.
+- **Only account setup blocker before staged inactive upload:** add secret `DISCORD_ALLOWED_USER_ID` to the Discord Worker, with the user's own numeric Discord User ID. Keep the existing `DISCORD_PUBLIC_KEY` and Workers AI `AI`.
+- Cloudflare Worker variable/secret changes may create a new production version. After creating the secret, reverify current production `/ask`, `/relay`, and baseline deployment ID before promoting new code; do not blindly rerun pinned release if baseline differs.
+- No loop command or cron has been activated, and Project Love Machine remains isolated.
+
 ### D1 provisioning update — user screenshot verified (2026-10-11)
 - Dedicated Discord-only D1 named `discord-relay-loop-state` was created on Cloudflare.
 - Database UUID shown by dashboard and now pinned in `wrangler.loop.toml`: `d80b08a4-0ff7-4320-9575-0d3c55cf7aba`.
