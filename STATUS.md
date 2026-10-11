@@ -1,5 +1,19 @@
 # AI Relay Lab — verified status (2026-10-11)
 
+## Stage 2 development — 2026-10-11 (GitHub only; NOT live)
+
+- Automatic finite cycle code `loop-core.mjs`: **planner A → builder B → planner A (prior builder output) → builder B**, maximum two rounds / four model calls.
+- `loop-worker.mjs`: provider-neutral invocation through existing **Cloudflare Workers AI Llama** binding; there is no consumer ChatGPT cross-chat connection.
+- `loop-state.mjs`: revision-controlled single-step state transitions to support future resumable processing and cooperative STOP. A future DB adapter must implement **atomic lease / compare-and-swap** before this can prevent duplicates across workers.
+- New isolated D1 schema **only staged** at `db/migrations/0001_discord_loop_jobs.sql`; not applied or provisioned. Do **not** use any PLM database.
+- CI run `38143409618`: **33/33 PASS**, zero failed. New D1 migration itself is not included in those 33 logic tests.
+- **Current live Worker remains `f50669d7-7685-4da1-b2e5-567ae7526922`**. No `/loop` Discord command is registered, no background loop runs, and no extra Cloudflare AI calls were triggered by this development.
+- Next blocker for a *live* reliable autonomous loop: create a **new dedicated Discord-only D1 database**, deploy the schema with verification, implement atomic job runner with scheduled/queued steps and limited quotas, then add authenticated `/loop`, `/loop-status`, and `/loop-stop` endpoints.
+- Actual GPT model access would require a separate **authorized API** and may have additional costs. A ChatGPT subscription does not create a free programmable GPT connection. Keep the zero-extra-spend constraint and do not connect billed services without approval.
+
+---
+
+
 ## CURRENT: LATENCY_V1_PRODUCTION_LIVE / DISCORD_COMMANDS_REGISTERED / NEW_VERSION_DISCORD_TEST_PENDING
 
 ### Completed and verified
