@@ -1,0 +1,43 @@
+name: Register Discord Relay Command (Manual)
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_command:
+        description: 'Type exactly: register-relay'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  register:
+    if: ${{ inputs.confirm_command == 'register-relay' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Register only the /relay command (preserves /ask)
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const token = process.env.DISCORD_BOT_TOKEN;
+          if (!token) throw Error('Missing DISCORD_BOT_TOKEN GitHub Secret');
+          const command = JSON.parse(fs.readFileSync('discord/relay-command.json', 'utf8'));
+          if (command.name !== 'relay' || command.type !== 1) throw Error('Unexpected command name');
+          const app = '1558705011339427840';
+          const url = `https://discord.com/api/v10/applications/${app}/commands`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bot ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(command),
+          });
+          if (!response.ok) {
+            console.error('Discord registration HTTP status:', response.status);
+            throw Error('Command registration failed');
+          }
+          console.log('Discord /relay registered successfully. Status:', response.status);
+          NODE
