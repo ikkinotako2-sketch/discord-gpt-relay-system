@@ -179,3 +179,46 @@ test('signed /ask interaction still reaches the existing handler',async()=>{
     assert.equal(calls[0].body.content,'既存のaskも正常');
   }finally{globalThis.fetch=oldFetch;}
 });
+
+test('off-topic greeting final output is marked failed and never retried',async()=>{
+  const d=db(), calls=[];
+  const env=envBase(d,async(_model,payload)=>{
+    calls.push(payload);
+    return {response:calls.length===4
+      ? 'タイトル：急いでいるときの安全な行動。周囲に注意してください。'
+      : '考えた計画'};
+  });
+  const now=Date.now();
+  await handleLoopCommand(interaction('loop',owner,[{name:'task',value:'短い挨拶文を改善して'}]),env,now);
+  for(let i=0;i<4;i++){
+    const r=await runOneScheduledLoopStep(env,{now:now+i*1000,leaseOwner:'quality-'+i});
+    assert.equal(r.status,i===3?'failed':'queued');
+  }
+  const row=await getLatestLoop(d,owner);
+  assert.equal(row.calls_used,4);
+  assert.equal(row.status,'failed');
+  assert.equal(row.last_error_code,'TASK_MISMATCH');
+  assert.equal(row.previous_artifact,'考えた計画');
+  assert.equal(calls.length,4);
+  assert.equal((await runOneScheduledLoopStep(env,{now:now+6000,leaseOwner:'quality-no-retry'})).status,'idle');
+  assert.match(await handleLoopCommand(interaction('loop-status',owner),env),/品質検査/);
+  assert.ok(calls.every(x=>JSON.parse(x.messages[1].content).original_task==='短い挨拶文を改善して'));
+});
+
+test('on-topic greeting completes in four calls and remains viewable to owner',async()=>{
+  const d=db(), calls=[];
+  const env=envBase(d,async(_model,payload)=>{
+    calls.push(payload);
+    return {response:calls.length===4
+      ? 'こんにちは！今日も素敵な一日をお過ごしください。'
+      : '挨拶文をより丁寧にする計画'};
+  });
+  const now=Date.now();
+  await handleLoopCommand(interaction('loop',owner,[{name:'task',value:'短い挨拶文を改善して'}]),env,now);
+  for(let i=0;i<4;i++)await runOneScheduledLoopStep(env,{now:now+i*1000,leaseOwner:'good-'+i});
+  const row=await getLatestLoop(d,owner);
+  assert.equal(row.status,'completed');
+  assert.equal(row.calls_used,4);
+  assert.match(row.previous_artifact,/こんにちは/);
+  assert.match(await handleLoopCommand(interaction('loop-status',owner),env),/元の依頼: 短い挨拶文を改善して/);
+});
