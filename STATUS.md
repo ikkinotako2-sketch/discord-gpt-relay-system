@@ -1,55 +1,26 @@
-# Incident update — 2026-10-11, release run 38138045023
+# AI Relay Lab — verified status (2026-10-11)
 
-**STATUS: LIVE_PRODUCTION_SWITCHED / HEALTH_UNVERIFIED / RELAY_UNREGISTERED**
+## CURRENT: WORKER_LIVE / DISCORD_RELAY_REGISTERED / END_TO_END_MANUAL_TEST_PENDING
 
-Observed GitHub Actions steps:
-- Offline tests: SUCCESS.
-- GitHub Bot Token authentication and exact app ID check: SUCCESS.
-- Cloudflare production deployment: SUCCESS, `82537b42-90d1-424d-92d4-9dcc5b1309de` at 100%.
-- Immediately following GET health check: FAILED. The curl request itself returned successfully; the body did not contain the expected string. Exact received body was NOT logged. A propagation delay is possible but unverified.
-- Discord /relay registration: SKIPPED.
-- Production version immediately before switch: `d693825b-fb22-4fdf-a55e-a7f511f4ee29`.
-- The previous live version may contain the temporary /__register_ask route and earlier exposed SETUP_KEY. Handle carefully.
+### Verified evidence (GitHub Actions)
+- **Release 38138045023:** preflight passed; Cloudflare production switched to version `82537b42-90d1-424d-92d4-9dcc5b1309de` at 100%. Immediate health check failed due to a missing expected response text, so the workflow ended FAILURE **after the production write**; Discord command registration was skipped.
+- **Recovery run 38139700266:** SUCCESS. GitHub runner GET request to the production Worker returned HTTP 200 with body `Discord GPT Relay candidate (not deployed).` (a stale status label hardcoded in the Worker); POST with no Discord signature returned HTTP 401; exact Discord AI Relay Lab Bot Token validated; Discord command `/relay` creation returned HTTP **201**.
+- **Offline test suite:** 13/13 PASS on earlier upload and release workflows. The latest GitHub tests after the recovery configuration change also passed (run 38139347691).
+- The recovery run **did not redeploy the Worker**. It only checked live behavior and registered the command.
+- Public repository: `ikkinotako2-sketch/discord-gpt-relay-system`.
 
-**Do not rerun the partially successful release.** Use `.github/workflows/register-relay.yml` to check the live Worker (GET and unsigned POST requiring HTTP 401) before registering /relay. This changes only Discord command registration, not Worker code. Run it manually with `confirm_command=register-relay`.
+### Required next checks
+1. In the **AI Relay Lab Test** Discord server, run `/ask question: こんにちは`; verify an AI reply appears.
+2. Run `/relay task: 簡単なWebサイトの作成計画を考えて`; verify both 【AI A：計画】 and 【AI B：実装案】 appear. Global Discord commands may take some time to propagate.
+3. If either command fails, collect its response and the relevant Cloudflare Worker logs **without exposing tokens or private data**; do not rerun a production deployment blindly.
+4. **Remove or rotate the previously exposed Cloudflare SETUP_KEY**. The new Worker code does not contain the temporary registration route `/__register_ask`. The old Cloudflare `DISCORD_BOT_TOKEN` is no longer needed by the current runtime, provided the command registration has succeeded. **Preserve `DISCORD_PUBLIC_KEY` and Workers AI binding `AI`.** Secret changes can affect deployed versions; verify `/ask` and `/relay` afterward.
+5. Later: implement durable and authorized handoff among **actual GPT-powered agents**, state/retry, monitoring, and opt-in external integrations. The current implementation is *only* two sequential Cloudflare Workers AI calls to a Llama model, **not** consumer ChatGPT sessions, and is not a self-sustaining autonomous network.
 
-If live Worker remains invalid or /ask fails, use `.github/workflows/rollback-relay.yml` with `confirm_rollback=RESTORE-PREVIOUS` only after reviewing the failed checks. Rollback is a production write and can restore the older temporary setup route; rotate or remove exposed secrets after recovery.
-
----
-
-# Current project status — 2026-10-11
-
-## Fixed ultimate goal
-**Discord-mediated automatic handoff between multiple GPT chat/agent contexts.** This is not satisfied merely by the /ask bot or by two calls to Cloudflare's Llama model.
-
-## Independently verified
-- GitHub Actions offline tests: **13/13 PASS** on run 38134687309 (2026-10-11).
-- Cloudflare inactive version upload: **SUCCESS** on run 38134687309.
-- Worker: `steep-glitter-b5cddiscord-ai-relay-lab`.
-- Uploaded inactive version: `82537b42-90d1-424d-92d4-9dcc5b1309de`.
-- The version upload did NOT switch production traffic.
-- Existing /ask replied in Japanese according to the user, before the upload; not independently retested afterwards.
-- One-step guarded release workflow prepared: `.github/workflows/release-verified-relay.yml`.
-
-## Pending before live release
-1. Add `DISCORD_BOT_TOKEN` to **GitHub Actions Secrets** for this repository; this is NOT the Cloudflare account token and must not be posted in chat or committed. Reset it if necessary. A standalone app command register requires this token.
-2. Check/disable the exposed previous `SETUP_KEY` in Cloudflare. It appeared in a screenshot. Do not post the new value anywhere.
-3. Explicitly run **Release Verified Discord Relay** with `approve=RELEASE`. This manually promotes only the pinned already-tested version. No automatic production deployment on push.
-4. Verify the GitHub release run succeeded; ask and relay commands still work in Discord.
-5. Remove leftover unneeded Cloudflare `SETUP_KEY` and `DISCORD_BOT_TOKEN` after production change, preserve `DISCORD_PUBLIC_KEY` and `AI`. Removing an environment secret may itself publish a new Worker version; verify runtime afterward.
-6. Keep a rollback reference to the prior deployment before release (the workflow prints previous deployment metadata).
-
-## Isolation
-- GitHub repo is public. Never publish user-private transcripts, bot tokens, or secret values.
-- No Project Love Machine resources modified.
-- Workers AI `@cf/meta/llama-3.1-8b-instruct-fp8` is used in the prototype, not GPT consumer chat sessions.
-- No actual autonomous loop or GPT chat-to-chat relay is deployed yet.
-- Workflow never charges intentionally; cloud free quotas may apply.
-
-## Safety controls
-- Exact account ID and Worker name are pinned in the release job.
-- Exact previously uploaded version ID is pinned in release command.
-- Release requires a manual `RELEASE` input.
-- Offline tests and Bot Token validation must succeed *before* production switch.
-- The /relay command is registered *after* health check, without replacing /ask.
-- No `/__register_ask` handler in the new version.
+### Safety and rollback
+- Production Worker: `steep-glitter-b5cddiscord-ai-relay-lab`.
+- Currently deployed known version from release logs: `82537b42-90d1-424d-92d4-9dcc5b1309de` (follow-up recovery GET 200 confirmed its expected body).
+- Last pre-release version: `d693825b-fb22-4fdf-a55e-a7f511f4ee29`. Manual emergency rollback workflow: `.github/workflows/rollback-relay.yml`. Do not rollback without evidence; the earlier version may contain the temporary registration endpoint.
+- Registration and health recheck (no deployment): `.github/workflows/register-relay.yml`; no manual string input necessary.
+- The duplicate partially-successful release workflow was removed to avoid further erroneous redeployments.
+- Keep tokens out of screenshots, messages, git commits, Discord, and logs. The GitHub repository is public and separated from Project Love Machine.
+- Cloudflare free quota and limits apply. No assertion of limitless execution, paid/free upgrade, or unattended workflow beyond implemented bounds.
