@@ -264,3 +264,19 @@ test('unsupported configured model never claims or burns a D1 model-call slot',a
   assert.equal(row.status,'queued');
   assert.equal(row.calls_used,0);
 });
+
+test('new private dashboard health marker requires complete OAuth secrets and does not alter original GPT-OSS identity',async()=>{
+  const req=new Request('https://test.invalid/',{method:'GET'});
+  const baseline={...envBase(db()),LOOP_AI_MODEL:'@cf/openai/gpt-oss-20b'};
+  const old=await worker.fetch(req,baseline,{});
+  assert.equal(await old.text(),'Discord GPT Relay gpt-oss pilot ready.');
+  const missing=await worker.fetch(req,{...baseline,DASHBOARD_ENABLED:'true'},{});
+  assert.equal(missing.status,503);
+  const ready=await worker.fetch(req,{
+    ...baseline,DASHBOARD_ENABLED:'true',
+    DISCORD_OAUTH_CLIENT_SECRET:'abcdef0123456789-secret-secret',
+    DASHBOARD_COOKIE_KEY:'1234567890abcdef1234567890abcdef1234567890abcdef'
+  },{});
+  assert.equal(ready.status,200);
+  assert.equal(await ready.text(),'Discord GPT Relay gpt-oss command-center ready.');
+});
