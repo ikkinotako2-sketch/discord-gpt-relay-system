@@ -1,6 +1,34 @@
 // Loop-only task anchoring and conservative result checks.
 // No external API calls, extra model calls, retries or user-data logging.
-const MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
+const DEFAULT_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
+export const GPT_OSS_MODEL = '@cf/openai/gpt-oss-20b';
+
+// Fail closed: only a dedicated, explicitly configured model setting may
+// switch /loop away from the existing Llama default. This setting cannot come
+// from Discord input or a previous model output.
+export function resolveLoopModel(env) {
+  const configured = env?.LOOP_AI_MODEL;
+  if (configured === undefined || configured === null || configured === '') return DEFAULT_MODEL;
+  if (configured === GPT_OSS_MODEL) return GPT_OSS_MODEL;
+  throw new Error('Unsupported LOOP_AI_MODEL configuration');
+}
+
+// Accept Cloudflare Workers AI's {response} shape, plus documented
+// Chat Completions and Responses API final text. Never surface reasoning.
+export function extractLoopFinalText(result) {
+  if (typeof result?.response === 'string' && result.response.trim()) return result.response.trim();
+  const choice = result?.choices?.[0]?.message?.content;
+  if (typeof choice === 'string' && choice.trim()) return choice.trim();
+  if (Array.isArray(result?.output)) {
+    const parts = result.output.filter(item => item?.type === 'message')
+      .flatMap(item => Array.isArray(item.content) ? item.content : [])
+      .filter(part => part?.type === 'output_text' && typeof part.text === 'string')
+      .map(part => part.text).filter(Boolean);
+    const joined = parts.join('\n').trim();
+    if (joined) return joined;
+  }
+  throw new Error('No final message text in model response');
+}
 const GREETING_REQUEST = /(?:挨拶|あいさつ|あいさつ文|挨拶文|greeting)/i;
 // Specific phrases expected in a usable Japanese greeting. We deliberately
 // do NOT accept the mere word "挨拶": an unrelated explanation can mention it.
@@ -35,17 +63,22 @@ export function evaluateLoopFinalOutput(task, output) {
 
 export async function generateLoopStageWithWorkersAI(env,{role,task,context}) {
   if(!env?.AI?.run) throw Error('AI binding unavailable');
+  const model=resolveLoopModel(env);
   const prompt=loopStageMessages({role,task,context});
+  const request = model === GPT_OSS_MODEL
+    ? { messages: prompt, max_tokens: role==='planner'?300:420, reasoning_effort:'low', temperature:0.2 }
+    : { messages: prompt, max_tokens: role==='planner'?260:320 };
   const started=Date.now();
   let result;
   try {
-    result=await env.AI.run(MODEL,{
-      messages:prompt,
-      max_tokens:role==='planner'?260:320
-    });
+    result=await env.AI.run(model,request);
   } finally {
-    console.log(JSON.stringify({event:'loop_ai_timing',role,duration_ms:Math.max(0,Date.now()-started)}));
+    // Timing-only logging: no task content, user ID, or model output.
+    console.log(JSON.stringify({event:'loop_ai_timing',role,
+      model_kind:model===GPT_OSS_MODEL?'gpt-oss':'llama',
+      duration_ms:Math.max(0,Date.now()-started)}));
   }
-  if(typeof result?.response!=='string' || !result.response.trim()) throw Error('Invalid loop AI result');
-  return result.response;
+  const text=extractLoopFinalText(result);
+  if(text.length > 3000)throw Error('Loop model text exceeds persisted output limit');
+  return text;
 }
