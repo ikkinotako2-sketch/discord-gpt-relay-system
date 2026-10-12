@@ -1,0 +1,56 @@
+name: Discord Swarm D1 Schema Read-Only Inventory (NO DEPLOY)
+on:
+  push:
+    branches: [diagnostics/swarm-d1-schema-readonly-20261012]
+    paths: ['.github/workflows/swarm-d1-schema-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  inspect-only:
+    if: ${{ github.event.head_commit.message == 'Inspect isolated Discord swarm schema once read only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: '6c8ccd6aface937ab5dabef61cb64534'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Confirm exact read-only Discord D1 boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/swarm-d1-schema-readonly-20261012'
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'DISCORD_D1_READ_TOKEN_MISSING'; exit 1; }
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.command-center.toml
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.command-center.toml
+      - name: Inspect isolated schema and legacy active count WITHOUT writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT name,type FROM sqlite_master WHERE name IN ('swarm_jobs','swarm_budget_days','swarm_single_active_job','swarm_owner_created') ORDER BY name;" > /tmp/swarm-ddl-inventory.json
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot=1;" > /tmp/legacy-live-count.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          function rows(path){
+            const d=JSON.parse(fs.readFileSync(path,'utf8'));
+            if(!Array.isArray(d)||d.length!==1||d[0]?.success!==true||!Array.isArray(d[0]?.results))throw Error('D1_RESPONSE_NOT_VERIFIED');
+            return d[0].results;
+          }
+          const expected={swarm_jobs:'table',swarm_budget_days:'table',swarm_single_active_job:'index',swarm_owner_created:'index'};
+          const found=rows('/tmp/swarm-ddl-inventory.json');
+          const present=new Set();
+          for(const item of found){
+            if(!Object.hasOwn(expected,item.name)||expected[item.name]!==item.type)throw Error('D1_SCHEMA_UNEXPECTED_OBJECT');
+            present.add(item.name);
+          }
+          const state=Object.keys(expected).map(name=>({object:name,present:present.has(name)}));
+          const count=rows('/tmp/legacy-live-count.json');
+          if(count.length!==1||!Number.isSafeInteger(count[0]?.active_jobs)||count[0].active_jobs<0)throw Error('D1_LEGACY_COUNT_INVALID');
+          console.log('ISOLATED_DISCORD_SWARM_SCHEMA_READ_ONLY '+JSON.stringify({objects:state,legacyActiveJobs:count[0].active_jobs}));
+          console.log('NO_WRITE_NO_MIGRATION_NO_WORKER_DEPLOY_NO_MODEL_INFERENCE');
+          NODE
