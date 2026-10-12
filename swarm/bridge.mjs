@@ -1,11 +1,24 @@
 // OFFLINE STAGED: bridge for the independently approved six-role runner.
 // No deployed route or Cron hook imports this module until a separate release.
 // Four distinct opt-ins prevent the six-role runner from launching accidentally.
-export function swarmModeEnabled(env) {
-  return env?.SWARM_API_ENABLED==='true'
+export function swarmModeEnabled(env,now=Date.now()) {
+  const explicitlyApproved=env?.SWARM_API_ENABLED==='true'
     && env?.SWARM_RUNNER_ENABLED==='true'
     && env?.SWARM_EXECUTION_APPROVED==='true'
     && env?.SWARM_EXCLUSIVE_MODE==='true';
+  if(!explicitlyApproved)return false;
+  // The specifically approved cap-6 *smoke test* needs a short absolute
+  // deadline, independent of GitHub Actions cleanup or an open browser.
+  // After expiry, NO new six-role stage may be claimed or inferred.
+  // This cannot cancel a model request already in flight.
+  if(env?.SWARM_DAILY_CALL_CAP==='6'){
+    const raw=env?.SWARM_SMOKE_EXPIRES_AT;
+    if(typeof raw!=='string'||!/^\d{13}$/.test(raw))return false;
+    const expiry=Number(raw);
+    if(!Number.isSafeInteger(expiry)||!Number.isFinite(now)||
+       expiry<=now||expiry-now>20*60*1000)return false;
+  }
+  return true;
 }
 export function isSwarmRoute(pathname) {
   return pathname==='/command-center/swarm'

@@ -1,4 +1,6 @@
 import test from 'node:test';
+// Always run the inline browser STOP regression under the existing offline CI.
+import './portal-client-stop.test.mjs';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
@@ -16,7 +18,7 @@ function fixture(){
  }}}}};
  const env={LOOP_DB:db,DASHBOARD_ENABLED:'true',SWARM_API_ENABLED:'true',
  DISCORD_ALLOWED_USER_ID:OWNER,SWARM_RUNNER_ENABLED:'true',SWARM_EXECUTION_APPROVED:'true',
- SWARM_EXCLUSIVE_MODE:'true',SWARM_DAILY_CALL_CAP:'6',DISCORD_OAUTH_CLIENT_SECRET:'fake-local-oauth-secret-123456',
+ SWARM_EXCLUSIVE_MODE:'true',SWARM_DAILY_CALL_CAP:'6',SWARM_SMOKE_EXPIRES_AT:String(Date.now()+12*60*1000),DISCORD_OAUTH_CLIENT_SECRET:'fake-local-oauth-secret-123456',
  DASHBOARD_COOKIE_KEY:'fake_local_test_session_key_1234567890'};
  return {db,env};
 }

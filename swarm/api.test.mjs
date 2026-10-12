@@ -24,7 +24,7 @@ function fixture(){
 async function sessionFixture(db){
   const env={LOOP_DB:db,DISCORD_ALLOWED_USER_ID:OWNER,DASHBOARD_ENABLED:'true',
     SWARM_API_ENABLED:'true',SWARM_RUNNER_ENABLED:'true',SWARM_EXECUTION_APPROVED:'true',
-    SWARM_EXCLUSIVE_MODE:'true',SWARM_DAILY_CALL_CAP:'6',DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
+    SWARM_EXCLUSIVE_MODE:'true',SWARM_DAILY_CALL_CAP:'6',SWARM_SMOKE_EXPIRES_AT:String(Date.now()+12*60*1000),DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
     DASHBOARD_COOKIE_KEY:'fake_testing_only_cookie_key_not_for_real_auth_1234'};
   const signed=await createDashboardSession(OWNER,env);
   const headers={Cookie:'dc_session='+signed};
@@ -149,4 +149,17 @@ test('handoff export requires owner session and exposes only confirmed job state
   assert.equal(out.runId,'handoff_job');
   assert.equal(out.stepsConfirmed,0);
   assert.match(out.markdown,/handoff test/);
+});
+
+test('expired six-call approval blocks new jobs but preserves owner CSRF STOP',async()=>{
+ const {db}=fixture(),auth=await sessionFixture(db);
+ const created=await handleSwarmApi(write('create',auth,{task:'start within window',cycles:1}),auth.env,{runIdFactory:()=> 'expires_before_stop'});
+ assert.equal(created.status,201);
+ const expired={...auth.env,SWARM_SMOKE_EXPIRES_AT:String(Date.now()-1000)};
+ const newJob=await handleSwarmApi(write('create',auth,{task:'must not start',cycles:1}),expired);
+ assert.equal(newJob.status,503);
+ assert.equal((await newJob.json()).error,'RUNNER_NOT_ENABLED');
+ const stop=await handleSwarmApi(write('stop',auth),expired);
+ assert.equal(stop.status,200);
+ assert.equal((await stop.json()).status,'stopped');
 });
