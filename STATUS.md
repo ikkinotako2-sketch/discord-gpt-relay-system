@@ -1,5 +1,14 @@
 # Discord AI Relay Lab — verified status (2026-10-12)
 
+## Free-plan confirmation and active-job preflight (2026-10-12)
+
+- User confirmed **Cloudflare Free plan**. No billing upgrade or paid API has been requested or performed.
+- Read-only GitHub Actions run [38191806194](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38191806194) attempted a scoped Cloudflare remote D1 aggregate query (`COUNT(*)` of queued/claimed active jobs) and **FAILED** before reporting a count. Logs contain only generic exit code 1; cause not established. Do not falsely assume empty active queue or permissions.
+- **BLOCKED** until owner-only Discord `/loop-status` shows a terminal status (completed/stopped/failed) and release-time authorization is reconfirmed; safer release workflows should also include a D1 active-job verification guard when permission becomes available.
+- GPT-OSS inactive version remains `64b48d3f-a427-4229-af27-c8c3710fa309`; production remains user-tested Llama `91dd0014-179c-44b8-88ac-7084776f5e7b` as far as last verified. No deployment or inference attempted in this preflight.
+
+---
+
 ## GPT-OSS pilot — INACTIVE CANDIDATE READY, LIVE LLAMA PRESERVED
 
 - Current production: user-tested **Llama** quality-v2 version `91dd0014-179c-44b8-88ac-7084776f5e7b`. The actual `/loop` continues to use Llama. No official GPT API subscription or consumer ChatGPT chat is connected.
