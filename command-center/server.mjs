@@ -4,6 +4,7 @@
 import {DASHBOARD_HTML} from './page.mjs';
 import {getOwnerDashboardSnapshot} from './data.mjs';
 import {createDurableLoop,requestDurableStop} from '../loop-d1.mjs';
+import {resolveLoopModel,GPT_OSS_MODEL} from '../loop-quality.mjs';
 
 export const COMMAND_CENTER_ORIGIN='https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev';
 const BASE='/command-center';
@@ -161,7 +162,10 @@ export async function handleDashboardRequest(request,env){
     return dashboardHtml();
   if(url.pathname===BASE+'/api/overview'&&request.method==='GET'){
     const snapshot=await getOwnerDashboardSnapshot(env.LOOP_DB,session.id);
-    return json({...snapshot,csrfToken:session.csrf});
+    const model=resolveLoopModel(env);
+    // This labels CURRENT configured model only; older D1 jobs have no model ID.
+    return json({...snapshot,modelName:model===GPT_OSS_MODEL?'GPT-OSS 20B':'Llama 3.1 8B',
+      modelScope:'current_settings_only',csrfToken:session.csrf});
   }
   if(url.pathname===BASE+'/api/start'&&request.method==='POST'){
     if(!validMutatingRequest(request,session))return json({error:'CSRF_REJECTED'},403);
