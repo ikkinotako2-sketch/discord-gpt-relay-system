@@ -1,0 +1,151 @@
+name: Authorized Task Focus V2 Production Release Once
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/task-focus-v2-approved-promote.once'
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  release:
+    if: ${{ github.event.head_commit.message == 'Authorize pinned task-focus v2 production rollout once' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 14
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      WORKER_NAME: steep-glitter-b5cddiscord-ai-relay-lab
+      EXPECTED_BASELINE: aecc9c29-dbef-4abb-8036-3fd3bfbacc23
+      EXACT_NEW_VERSION: 91dd0014-179c-44b8-88ac-7084776f5e7b
+      LIVE_URL: https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify one-time authorization and pinned scope before live changes
+        run: |
+          set -euo pipefail
+          test "$(cat preflight/task-focus-v2-approved-promote.once)" = 'DEPLOY-APPROVED-V2-91dd0014-179c-44b8-88ac-7084776f5e7b'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.loop.toml
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.loop.toml
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.loop.toml
+          grep -Fxq 'keep_vars = true' wrangler.loop.toml
+          grep -Fxq 'crons = ["*/1 * * * *"]' wrangler.loop.toml
+          grep -Fq 'Discord GPT Relay loop-v2 task-focus ready.' worker-loop.mjs
+          grep -Fq 'TASK_MISMATCH' worker-loop.mjs
+      - name: All offline tests including legacy handlers and task-mismatch detection
+        run: |
+          node --test relay.test.mjs worker-relay.test.mjs loop-core.test.mjs loop-worker.test.mjs loop-state.test.mjs loop-d1.test.mjs worker-loop.test.mjs loop-quality.test.mjs
+      - name: Verify old loop-v1 at 100%, healthy, and all five Discord commands registered
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/taskfocus-before.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/taskfocus-before.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const v=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          if(v.at(-1)!==process.env.EXPECTED_BASELINE)throw Error('Live version no longer matches user-tested v1; NO deployment.');
+          console.log('Exact previously user-tested four-step loop-v1 remains live.');
+          NODE
+          node --input-type=module <<'NODE'
+          const g=await fetch(process.env.LIVE_URL,{signal:AbortSignal.timeout(12000)});
+          const body=await g.text();
+          const p=await fetch(process.env.LIVE_URL,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)});
+          if(g.status!==200||body.trim()!=='Discord GPT Relay loop-v1 ready.'||p.status!==401)
+            throw Error('Original Worker health or Discord signature gate failing. Blocked.');
+          const token=process.env.DISCORD_BOT_TOKEN;
+          if(!token)throw Error('Missing GitHub Discord Bot Token secret');
+          const me=await fetch('https://discord.com/api/v10/users/@me',{
+            headers:{Authorization:'Bot '+token},signal:AbortSignal.timeout(12000)});
+          if(!me.ok)throw Error('Discord Bot Token not valid '+me.status);
+          const bot=await me.json();
+          const app='1558705011339427840';
+          if(!bot.bot||bot.id!==app)throw Error('Wrong Discord bot application');
+          const commandsResponse=await fetch('https://discord.com/api/v10/applications/'+app+'/commands',{
+            headers:{Authorization:'Bot '+token},signal:AbortSignal.timeout(12000)});
+          if(!commandsResponse.ok)throw Error('Discord commands GET HTTP '+commandsResponse.status);
+          const commands=await commandsResponse.json();
+          const names=new Set(commands.map(c=>c.name));
+          for(const needed of ['ask','relay','loop','loop-status','loop-stop'])
+            if(!names.has(needed))throw Error('Discord command missing '+needed);
+          console.log('Five slash commands verified read-only. No commands modified.');
+          NODE
+      - name: Verify new candidate was uploaded to exact expected Worker
+        run: |
+          npx --yes wrangler@4 versions list --name "$WORKER_NAME" > /tmp/taskfocus-versions.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/taskfocus-versions.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          if(!s.includes(process.env.EXACT_NEW_VERSION))
+            throw Error('Exact uploaded candidate not visible. Stop without production write.');
+          console.log('Exact preuploaded v2 version found on correct Worker.');
+          NODE
+      - name: Promote only pinned, verified inactive v2 version
+        id: promote
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 versions deploy "$EXACT_NEW_VERSION@100%" --name "$WORKER_NAME" --message "Task quality v2 approved with live v1 rollback" --yes
+      - name: Check propagated v2 health, D1 and Discord signature gate
+        id: health
+        run: |
+          node --input-type=module <<'NODE'
+          for(let n=1;n<=12;n++){
+            try{
+              const get=await fetch(process.env.LIVE_URL,{signal:AbortSignal.timeout(10000)});
+              const text=await get.text();
+              const post=await fetch(process.env.LIVE_URL,{method:'POST',body:'{}',signal:AbortSignal.timeout(10000)});
+              const identity=text.trim()==='Discord GPT Relay loop-v2 task-focus ready.';
+              console.log(JSON.stringify({attempt:n,getStatus:get.status,v2:identity,unsignedPostStatus:post.status}));
+              if(get.status===200 && identity && post.status===401)process.exit(0);
+            }catch(e){console.log('Health probe '+n+' unverified');}
+            if(n<12)await new Promise(resolve=>setTimeout(resolve,5000));
+          }
+          throw Error('Task-quality Worker did not pass live readiness checks.');
+          NODE
+          npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/taskfocus-after.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/taskfocus-after.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const v=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          if(v.at(-1)!==process.env.EXACT_NEW_VERSION)throw Error('Incorrect live version; rollback required.');
+          console.log('Approved quality-v2 active at 100%.');
+          NODE
+      - name: Automatically restore last tested loop-v1 if rollout verification failed
+        if: ${{ failure() && steps.promote.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/taskfocus-current-failed.txt
+          CURRENT=$(node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/taskfocus-current-failed.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const v=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          console.log(v.at(-1)??'UNKNOWN');
+          NODE
+          )
+          if [ "$CURRENT" = "$EXPECTED_BASELINE" ]; then echo 'Old loop-v1 already live; no rollback needed'; exit 0; fi
+          test "$CURRENT" = "$EXACT_NEW_VERSION" || { echo 'Unknown concurrent version, rollback blocked'; exit 1; }
+          npx --yes wrangler@4 versions deploy "$EXPECTED_BASELINE@100%" --name "$WORKER_NAME" --message "Auto rollback to proven four-step Discord loop-v1" --yes
+          node --input-type=module <<'NODE'
+          for(let n=1;n<=10;n++){
+            try{
+              const r=await fetch(process.env.LIVE_URL,{signal:AbortSignal.timeout(12000)});
+              const body=await r.text();
+              if(r.status===200 && body.trim()==='Discord GPT Relay loop-v1 ready.')process.exit(0);
+            }catch{}
+            if(n<10)await new Promise(resolve=>setTimeout(resolve,5000));
+          }
+          throw Error('Restoration attempted but original loop-v1 readiness not verified');
+          NODE
+      - name: Release summary
+        if: ${{ success() }}
+        run: |
+          echo 'Authorized v2 deployed and verified. Cron/Discord slash command configuration not rewritten.'
+          echo 'Operator should now test /ask, /relay, /loop-status, and one new short /loop task.'
