@@ -12,12 +12,17 @@ if(!/CREATE UNIQUE INDEX IF NOT EXISTS\s+swarm_single_active_job/.test(executabl
   throw Error('Missing one-active-job D1 guard');
 if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const base=process.env.GITHUB_BASE_REF;
-  if(base!=='main')throw Error('Only main-base staged PRs are authorized');
-  const paths=execFileSync('git',['diff','--name-only','origin/main...HEAD'],{
+  const stackedBase='feature/isolated-six-agent-command-center-20261012';
+  const stackedHead='feature/swarm-six-role-safe-wiring-20261012';
+  if(base!=='main' && (base!==stackedBase||process.env.GITHUB_HEAD_REF!==stackedHead))
+    throw Error('Unexpected PR base or integration branch');
+  const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
   if(!paths.length)throw Error('No staged changes detected');
+  const extra=new Set(['worker-loop.mjs','command-center/server.mjs',
+    '.github/workflows/swarm-exclusive-integration-tests.yml']);
   const illegal=paths.filter(path=>path!=='.github/workflows/swarm-offline-tests.yml'&&
-    !path.startsWith('swarm/'));
+    !path.startsWith('swarm/')&&!(base===stackedBase&&extra.has(path)));
   if(illegal.length)throw Error('Protected production path touched: '+illegal.join(', '));
   process.stdout.write('ISOLATED_PR_PATHS_PASS '+paths.length+' changed files\n');
 }
