@@ -1,5 +1,32 @@
 # AI Relay Command Center — private website
 
+## Fastest safe publication path (prepared, not executed)
+
+A **single guarded release workflow** now exists at
+`.github/workflows/command-center-guarded-release.yml`.
+It is **manual only** and requires two exact inputs:
+
+- `confirm`: `RELEASE-PRIVATE-DASHBOARD`
+- `active_job_check`: `NO-ACTIVE-JOB` (only after Discord `/loop-status` shows the latest job has ended)
+
+It checks the exact existing **Discord-only Worker and D1 UUID**, the expected live GPT-OSS Worker version, all five existing Discord commands, required Worker secret **names** (not values), complete regression tests, a Wrangler dry-run, then uploads an **inactive** candidate and probes its health. Only after those gates pass can it promote the candidate; it then checks that anonymous visitors cannot view history, Discord OAuth login redirects correctly, and unsigned Discord POST remains 401. If the promoted version fails verification, it attempts a guarded rollback to the previous GPT-OSS Worker version. **This workflow never deploys to the YouTube/PLM repository, Workers, databases, or Cron.**
+
+The release workflow has NOT been executed. The user must first register the OAuth redirect and two Worker secrets and confirm there is no current loop.
+
+**Latest checks:** [full regression CI 38195334162](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38195334162) reported **94/94 PASS** and [private dashboard dry-run CI 38195217680](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38195217680) reported **60/60 focused PASS** and `ISOLATION_GUARD_PASS`. Any newer code requires rerun.
+
+The private screen now also shows each saved step's **AI A/B handoff text**, not just the graphical arrows. This is available only after a successful owner login. The page polls every 15 seconds while open.
+
+### Isolation constraints
+
+- Only repository: `ikkinotako2-sketch/discord-gpt-relay-system`.
+- Only Cloudflare Worker: `steep-glitter-b5cddiscord-ai-relay-lab`.
+- Only D1: `discord-relay-loop-state` (`d80b08a4-0ff7-4320-9575-0d3c55cf7aba`).
+- No calls to the YouTube API, no writes to Project Love Machine and no Cron changes in the release workflow.
+- Cloudflare account-level shared Free quotas cannot be *universally* guaranteed isolated; the dry-run/build and site publication itself perform **no new AI inference calls**, minimizing indirect impact.
+
+---
+
 ## What exists today (2026-10-12)
 
 **STATUS: CODE_READY / SECURITY_TESTS_PASS / OFFLINE_BUILD_PASS / NOT DEPLOYED**
