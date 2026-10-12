@@ -72,7 +72,7 @@ th,td{padding:12px;border-bottom:1px solid #293b52}th{color:#9ab0c8;font-size:.8
  <div class="header">
   <div><span class="small">DISCORD GPT RELAY SYSTEM / MANAGEMENT</span><h1>AI Relay Command Center</h1>
    <p class="sub">AIの接続関係、実行段階、停止状態をひと目で管理</p></div>
-  <div class="buttonrow"><span class="pill amber" id="modeBadge"><span class="dot"></span> DEMO — 未接続</span><button class="btn alt" id="refresh">表示更新</button></div>
+  <div class="buttonrow"><span class="pill amber" id="modeBadge"><span class="dot"></span> DEMO — 未接続</span><button class="btn alt" id="refresh">表示更新</button><span class="small" id="lastUpdated">未接続</span></div>
  </div>
  <div class="banner" id="securityBanner"><strong>プレビュー画面</strong> — 表示内容はサンプルです。実際のD1やDiscordに接続していません。開始・停止は認証付きAPIが完成するまで使用できません。</div>
  <section class="cards" aria-label="全体状態">
@@ -183,6 +183,7 @@ async function refresh(){
    setText('modeBadge','● 管理者接続済み');
    $('securityBanner').hidden=true;
    render(data.jobs,data.status);
+   setText('lastUpdated','最終更新: '+new Date().toLocaleTimeString('ja-JP'));
  }catch(e){
    authenticated=false;
    setButton(false,false);
@@ -208,7 +209,10 @@ setText('activeCount','デモ');
 setText('modelName','サンプル（未接続）');
 setText('callCount','4 / 4');
 for(let i=1;i<=4;i++)$('step'+i).classList.add('done');
-if(location.pathname.startsWith('/command-center')&&location.hostname.endsWith('workers.dev'))refresh();
+if(location.pathname.startsWith('/command-center')&&location.hostname.endsWith('workers.dev')){
+  refresh();
+  setInterval(()=>{if(authenticated&&!document.hidden)refresh();},15000);
+}
 })();
 </script>
 </body>
