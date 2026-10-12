@@ -47,3 +47,4 @@ jobs:
           echo 'DISCORD_D1_READ_TOKEN_VERIFIED; ACTIVE_JOBS=0; NO D1 WRITES; NO DEPLOY'
 # Pre-cutover owner verification 2026-10-12; read-only; no deployment.
 # Pre-neon-PR4 verification 2026-10-12; read-only; no production changes.
+# After-neon-merge D1 check 2026-10-12; no Worker, D1 data or secret mutations.
