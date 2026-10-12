@@ -96,6 +96,7 @@ th,td{padding:12px;border-bottom:1px solid #293b52}th{color:#9ab0c8;font-size:.8
    <div class="runsteps" aria-label="進捗ゲージ"><div class="stepbar" id="step1"></div><div class="stepbar" id="step2"></div><div class="stepbar" id="step3"></div><div class="stepbar" id="step4"></div></div>
    <div class="stepnames"><span>1 / 計画</span><span>2 / 作成</span><span>3 / 改善</span><span>4 / 完成</span></div>
    <p class="notice">現在の実装では、AI AとAI Bは同じ指定モデルを異なる役割で呼び出します。AI Bの結果を次のAI Aへ引き継ぎます。1件の依頼は最大4回で自動停止します。</p>
+   <div class="detail" style="margin-top:15px"><strong>各AIから次のAIへの引き継ぎ記録</strong><div id="handoffHistory" class="small">現在はデモ表示です。実際の引き継ぎ結果はDiscord認証後に表示されます。</div></div>
   </section>
   <section class="card" aria-labelledby="controlTitle">
    <h2 class="headline" id="controlTitle">操作パネル</h2>
@@ -146,6 +147,20 @@ function render(jobList, serverStatus){
  setText('runId','Run ID: '+(chosen?chosen.id:'なし'));
  setText('originalTask',chosen?chosen.task:'まだ実行履歴はありません。');
  setText('lastResult',chosen?(chosen.finalResult||('状態：'+statusLabel(chosen.status))):'結果はありません。');
+ const handoff=$('handoffHistory');
+ clear(handoff);
+ const trace=chosen&&Array.isArray(chosen.history)?chosen.history:[];
+ if(!trace.length){const p=document.createElement('p');p.textContent='引き継ぎ記録はまだありません。';handoff.appendChild(p);}
+ else for(const step of trace){
+   const article=document.createElement('article');
+   article.style.cssText='border-top:1px solid #2b3c52;padding:10px 0';
+   const who=document.createElement('strong');
+   who.textContent=(step.role==='planner'?'AI A / 計画':'AI B / 作成')+' — '+step.round+'周目';
+   const pre=document.createElement('p');
+   pre.style.whiteSpace='pre-wrap';pre.style.lineHeight='1.5';pre.style.margin='7px 0 0';
+   pre.textContent=String(step.text||'').slice(0,1200);
+   article.append(who,pre);handoff.appendChild(article);
+ }
  for(let i=1;i<=4;i++){
    const bar=$('step'+i);
    bar.className='stepbar'+(chosen&&i<=chosen.callsUsed?(chosen.status==='claimed'&&i===chosen.callsUsed?' active':' done'):'');
