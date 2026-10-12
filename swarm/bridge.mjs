@@ -29,7 +29,7 @@ export async function runExclusiveScheduledTick(env,{runLegacy,runSwarm}={}) {
   try{
     row=await env.LOOP_DB.prepare(
       "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot=1"
-    ).first();
+    ).bind().first();
   }catch{
     return {source:'swarm',status:'blocked',reason:'LEGACY_STATE_UNVERIFIED'};
   }
