@@ -4,6 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {handleSwarmApi} from './api.mjs';
 import {createDashboardSession,authenticateDashboard,COMMAND_CENTER_ORIGIN} from '../command-center/server.mjs';
+import {createDurableLoop} from '../loop-d1.mjs';
 const OWNER='123456789012345678',OTHER='223456789012345678';
 const BASE=COMMAND_CENTER_ORIGIN+'/command-center/api/swarm/';
 function fixture(){
@@ -74,6 +75,31 @@ test('invalid user inputs do not create jobs; no information leaked on errors',a
   assert.equal((await handleSwarmApi(write('create',auth,{task:'x',cycles:7}),auth.env)).status,400);
   assert.equal((await handleSwarmApi(write('resume',auth,{runId:'../../secret'}),auth.env)).status,400);
   assert.equal((await handleSwarmApi(write('create',auth,{task:'x'.repeat(2000),cycles:1}),auth.env)).status,400);
+});
+test('six-role create refuses a live two-role job and never consumes a model call',async()=>{
+ const {db,sql}=fixture(),auth=await sessionFixture(db);
+ await createDurableLoop(db,{runId:'legacy_in_progress',requesterId:OWNER,task:'Original protected task'});
+ const denied=await handleSwarmApi(write('create',auth,{task:'next staged task',cycles:1}),auth.env);
+ assert.equal(denied.status,409);
+ assert.equal((await denied.json()).error,'LEGACY_LOOP_ACTIVE');
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM swarm_jobs').get().n,0);
+});
+test('six-role task creation requires owner configured local call cap',async()=>{
+ const {db,sql}=fixture(),auth=await sessionFixture(db);
+ const blocked=await handleSwarmApi(write('create',auth,{task:'local safe task',cycles:1}),
+ {...auth.env,SWARM_DAILY_CALL_CAP:undefined});
+ assert.equal(blocked.status,503);
+ assert.equal((await blocked.json()).error,'DAILY_CALL_CAP_REQUIRED');
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM swarm_jobs').get().n,0);
+});
+test('read-only six-role status works without executing any model call when exclusive flag is off',async()=>{
+ const {db}=fixture(),auth=await sessionFixture(db),view={...auth.env,SWARM_EXCLUSIVE_MODE:'false'};
+ const r=await handleSwarmApi(req('overview',{headers:auth.headers}),view);
+ assert.equal(r.status,200);
+ const data=await r.json();
+ assert.equal(data.runnerEnabled,false);
+ const create=await handleSwarmApi(write('create',auth,{task:'not authorized',cycles:1}),view);
+ assert.equal(create.status,503);
 });
 test('wrong-origin read path is not considered the owned Command Center',async()=>{
   const {db}=fixture(),auth=await sessionFixture(db);
