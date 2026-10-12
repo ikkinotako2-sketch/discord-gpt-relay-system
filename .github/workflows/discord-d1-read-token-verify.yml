@@ -1,0 +1,47 @@
+name: Discord D1 Read Token Verification (NO DEPLOY)
+on:
+  push:
+    branches: [diagnostics/discord-d1-read-token-check-20261012]
+    paths:
+      - '.github/workflows/discord-d1-read-token-verify.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    if: ${{ github.event.head_commit.message == 'Verify owner-registered Discord D1 Read token once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: "6c8ccd6aface937ab5dabef61cb64534"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate exact dedicated Discord read-only scope (no Worker or D1 changes)
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-d1-read-token-check-20261012'
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'BLOCKED_DISCORD_D1_READ_SECRET_MISSING'; exit 1; }
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.command-center.toml
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.command-center.toml
+          node command-center/verify-isolation.mjs
+      - name: Query Discord D1 active-job COUNT using owner-registered D1 Read token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot = 1;" > /tmp/discord-d1-check.json 2> /tmp/discord-d1-check.err; then
+            node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const e=fs.readFileSync('/tmp/discord-d1-check.err','utf8');
+          const category=/\b401\b|\b403\b|10000|authentication|unauthorized|forbidden/i.test(e)?'ACCESS_DENIED_OR_TOKEN_SCOPE':
+            /\b429\b|rate limit/i.test(e)?'RATE_LIMIT':'WRANGLER_OR_QUERY_FAILED';
+          console.log('DISCORD_D1_READ_VERIFICATION_BLOCKED '+category+'; diagnostic output omitted to protect credentials');
+          NODE
+            exit 1
+          fi
+          node command-center/release-d1-guard.mjs /tmp/discord-d1-check.json
+          echo 'DISCORD_D1_READ_TOKEN_VERIFIED; ACTIVE_JOBS=0; NO D1 WRITES; NO DEPLOY'
