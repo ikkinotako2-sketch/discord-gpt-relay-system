@@ -29,7 +29,7 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
   const url=new URL(request.url);
   if(url.origin!==COMMAND_CENTER_ORIGIN||!url.pathname.startsWith(BASE))return json({error:'NOT_FOUND'},404);
   // Separate, explicit feature flag. This module alone cannot activate a route.
-  if(!swarmModeEnabled(env)||!dashboardConfigured(env))return json({error:'DISABLED'},503);
+  if(env?.SWARM_API_ENABLED!=='true'||!dashboardConfigured(env))return json({error:'DISABLED'},503);
   const session=await authenticateDashboard(request,env);
   if(!session)return json({error:'AUTH_REQUIRED'},401);
   if(!env.LOOP_DB?.prepare)return json({error:'DB_UNAVAILABLE'},503);
@@ -64,7 +64,7 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
       try{
         legacy=await env.LOOP_DB.prepare(
           "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot=1"
-        ).first();
+        ).bind().first();
       }catch{return json({error:'LEGACY_STATE_UNVERIFIED'},503);}
       if(!legacy||!Number.isSafeInteger(legacy.active_jobs)||legacy.active_jobs<0)
         return json({error:'LEGACY_STATE_UNVERIFIED'},503);
