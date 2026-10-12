@@ -46,3 +46,25 @@ test('enabled private six-role portal still redirects anonymous visitors to owne
  const r=await worker.fetch(new Request(url),env,null);
  assert.equal(r.status,302);assert.equal(r.headers.get('location'),'/command-center/login');
 });
+
+test('six-call smoke test requires an explicit near-term absolute deadline',()=>{
+ const now=Date.now();
+ const smoke={...flags,SWARM_DAILY_CALL_CAP:'6'};
+ assert.equal(swarmModeEnabled(smoke,now),false,'missing deadline must fail closed');
+ assert.equal(swarmModeEnabled({...smoke,SWARM_SMOKE_EXPIRES_AT:'nonsense'},now),false);
+ assert.equal(swarmModeEnabled({...smoke,SWARM_SMOKE_EXPIRES_AT:String(now-1000)},now),false);
+ assert.equal(swarmModeEnabled({...smoke,SWARM_SMOKE_EXPIRES_AT:String(now+21*60*1000)},now),false);
+ assert.equal(swarmModeEnabled({...smoke,SWARM_SMOKE_EXPIRES_AT:String(now+12*60*1000)},now),true);
+ assert.equal(swarmModeEnabled({...smoke,SWARM_SMOKE_EXPIRES_AT:String(now+12*60*1000)},now+12*60*1000),false);
+});
+test('an expired six-call smoke approval cannot schedule any further agent step',async()=>{
+ const now=Date.now(),expired={...flags,SWARM_DAILY_CALL_CAP:'6',SWARM_SMOKE_EXPIRES_AT:String(now-1)};
+ let calls=0;
+ const result=await runExclusiveScheduledTick(expired,{
+  runLegacy:async()=>({status:'idle'}),
+  runSwarm:async()=>{calls++;return {status:'queued'};}
+ });
+ assert.equal(result.source,'legacy');
+ assert.equal(result.status,'idle');
+ assert.equal(calls,0);
+});
