@@ -110,7 +110,7 @@ export default {
     // Disabled by default: requires explicitly configured OAuth and session secrets.
     const pathname=new URL(request.url).pathname;
     if(isSwarmRoute(pathname)){
-      if(!swarmModeEnabled(env))return new Response('Six-role engine disabled',{status:503});
+      if(env?.SWARM_API_ENABLED!=='true')return new Response('Six-role engine disabled',{status:503});
       try{return await handleSwarmRoute(request,env);}
       catch{console.error('swarm_dashboard_unavailable');return new Response('Swarm unavailable',{status:503});}
     }
