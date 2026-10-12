@@ -1,0 +1,30 @@
+# STAGED ONLY: Private AI Relay Command Center candidate. Do not deploy yet.
+# Current GPT-OSS production remains version 64b48d3f-a427-4229-af27-c8c3710fa309 until separately approved rollout.
+# Previous user-tested Llama rollback: 91dd0014-179c-44b8-88ac-7084776f5e7b.
+# Changing this file does NOT redeploy the live Worker; future changes require an explicit guarded release.
+# Dedicated Discord Relay Lab D1 table and required owner-secret presence were verified.
+# Never use a Project Love Machine D1 ID or Cloudflare database.
+name = "steep-glitter-b5cddiscord-ai-relay-lab"
+main = "worker-loop.mjs"
+compatibility_date = "2026-10-11"
+workers_dev = true
+keep_vars = true
+
+[ai]
+binding = "AI"
+
+[vars]
+LOOP_AI_MODEL = "@cf/openai/gpt-oss-20b"
+DASHBOARD_ENABLED = "true"
+
+[[d1_databases]]
+binding = "LOOP_DB"
+database_name = "discord-relay-loop-state"
+database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"
+migrations_dir = "db/migrations"
+
+[triggers]
+crons = ["*/1 * * * *"]
+
+[secrets]
+required = [ "DISCORD_PUBLIC_KEY", "DISCORD_ALLOWED_USER_ID", "DISCORD_OAUTH_CLIENT_SECRET", "DASHBOARD_COOKIE_KEY" ]
