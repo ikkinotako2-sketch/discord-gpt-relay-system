@@ -1,0 +1,31 @@
+name: Six-Agent Exclusive Integration Offline (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'worker-loop.mjs'
+      - 'command-center/server.mjs'
+      - 'swarm/**'
+      - '.github/workflows/swarm-exclusive-integration-tests.yml'
+permissions:
+  contents: read
+jobs:
+  offline-wiring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact existing Discord-only paths and staged migration
+        run: node swarm/verify-isolation.mjs
+      - name: Six-role bridge and full staged workflow tests
+        run: |
+          node --test swarm/bridge.test.mjs swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs
+      - name: Legacy Discord, D1, OAuth and 2-role safety regressions
+        run: |
+          node --test worker-loop.test.mjs command-center-server.test.mjs loop-d1.test.mjs loop-quality.test.mjs
+      - name: Verify only offline execution
+        run: echo 'STAGED_ONLY; no Worker publish, D1 migration, secrets, model inference or other project action'
