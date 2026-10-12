@@ -1,5 +1,8 @@
 name: Six-agent swarm isolated offline tests
 on:
+  push:
+    branches: ['feature/isolated-six-agent-command-center-20261012']
+    paths: ['.github/workflows/swarm-offline-tests.yml']
   pull_request:
     paths:
       - 'swarm/**'
