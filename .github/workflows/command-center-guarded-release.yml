@@ -1,0 +1,208 @@
+name: Private Command Center Guarded Release
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type RELEASE-PRIVATE-DASHBOARD only after setting Discord OAuth Redirect and both Worker Secrets'
+        required: true
+        type: string
+      active_job_check:
+        description: 'Type NO-ACTIVE-JOB after /loop-status confirms no running task'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 18
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CONFIRM: ${{ inputs.confirm }}
+      JOB_CHECK: ${{ inputs.active_job_check }}
+      WORKER_NAME: steep-glitter-b5cddiscord-ai-relay-lab
+      OLD_VERSION: 64b48d3f-a427-4229-af27-c8c3710fa309
+      WORKER_URL: https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require explicit current owner approval and exact isolated resources
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = 'RELEASE-PRIVATE-DASHBOARD'
+          test "$JOB_CHECK" = 'NO-ACTIVE-JOB'
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          node command-center/verify-isolation.mjs
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.command-center.toml
+          grep -Fxq 'main = "worker-loop.mjs"' wrangler.command-center.toml
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.command-center.toml
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.command-center.toml
+          grep -Fxq 'DASHBOARD_ENABLED = "true"' wrangler.command-center.toml
+          grep -Fxq 'LOOP_AI_MODEL = "@cf/openai/gpt-oss-20b"' wrangler.command-center.toml
+          grep -Fxq 'crons = ["*/1 * * * *"]' wrangler.command-center.toml
+          grep -Fq 'Discord GPT Relay gpt-oss command-center ready.' worker-loop.mjs
+      - name: Verify exact current Discord Worker version before writes
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/dashboard-before.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/dashboard-before.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const ids=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          if(ids.at(-1)!==process.env.OLD_VERSION) throw Error('Discord Worker changed; no rollout allowed.');
+          console.log('User-approved current Discord-only Worker version verified.');
+          NODE
+      - name: Verify existing Worker is healthy and requires signed Discord interactions
+        run: |
+          node --input-type=module <<'NODE'
+          const u=process.env.WORKER_URL;
+          const [get,post]=await Promise.all([
+            fetch(u,{signal:AbortSignal.timeout(12000)}),
+            fetch(u,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)})
+          ]);
+          if(get.status!==200 || (await get.text()).trim()!=='Discord GPT Relay gpt-oss pilot ready.' || post.status!==401)
+            throw Error('Existing GPT-OSS worker failed signature/health check. Stop.');
+          console.log('Original GPT-OSS loop is healthy; no job was submitted.');
+          NODE
+      - name: Verify new secret NAMES only, never their values
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 secret list --name "$WORKER_NAME" --format json > /tmp/dashboard-secret-names.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const arr=JSON.parse(fs.readFileSync('/tmp/dashboard-secret-names.json','utf8'));
+          if(!Array.isArray(arr))throw Error('Secret-name inventory unreadable.');
+          const names=new Set(arr.map(x=>x.name));
+          for(const n of ['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID','DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY']){
+            if(!names.has(n))throw Error('Required private Worker secret missing: '+n);
+          }
+          console.log('Four required Discord-only secret names verified; no values read.');
+          NODE
+      - name: Run complete offline tests with privacy/CSRF guards
+        run: |
+          node --test relay.test.mjs worker-relay.test.mjs loop-core.test.mjs loop-worker.test.mjs loop-state.test.mjs loop-d1.test.mjs worker-loop.test.mjs loop-quality.test.mjs command-center.test.mjs command-center-server.test.mjs
+      - name: Compile only without changing production
+        run: |
+          npx --yes wrangler@4 deploy --dry-run --config wrangler.command-center.toml --outdir /tmp/private-command-center
+      - name: Save candidate as INACTIVE Worker version
+        id: upload
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 versions upload --config wrangler.command-center.toml --message "Discord-only owner-auth Command Center; no traffic yet" 2>&1 | tee /tmp/dashboard-upload.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/dashboard-upload.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const ids=[...s.matchAll(/Worker Version ID:\s*([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          if(ids.length!==1||ids[0]===process.env.OLD_VERSION)throw Error('Uploaded candidate not uniquely identified. Stop.');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'version_id='+ids[0]+'\n');
+          console.log('New Discord-only inactive candidate '+ids[0]);
+          NODE
+      - name: Validate private candidate preview and no production change
+        env:
+          NEW_VERSION: ${{ steps.upload.outputs.version_id }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/dashboard-before-promotion.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/dashboard-before-promotion.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const v=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          if(v.at(-1)!==process.env.OLD_VERSION)throw Error('Production changed during upload. Stop.');
+          NODE
+          node --input-type=module <<'NODE'
+          const version=process.env.NEW_VERSION;
+          if(!/^[0-9a-f-]{36}$/.test(version))throw Error('No candidate ID');
+          const url='https://'+version.slice(0,8)+'-'+process.env.WORKER_NAME+'.ikkinotako2.workers.dev/';
+          const [get,post]=await Promise.all([
+            fetch(url,{signal:AbortSignal.timeout(15000)}),
+            fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(15000)})
+          ]);
+          const marker=(await get.text()).trim();
+          if(get.status!==200||marker!=='Discord GPT Relay gpt-oss command-center ready.'||post.status!==401)
+            throw Error('Private preview did not confirm required OAuth secrets, D1 and Discord signature gate');
+          console.log('Private dashboard candidate preview healthy. No traffic cutover yet.');
+          NODE
+      - name: Promote only exact tested candidate to production
+        id: promote
+        env:
+          NEW_VERSION: ${{ steps.upload.outputs.version_id }}
+        run: |
+          set -euo pipefail
+          test -n "$NEW_VERSION"
+          npx --yes wrangler@4 versions deploy "$NEW_VERSION@100%" --name "$WORKER_NAME" --message "Approved owner-only Command Center; preserve GPT-OSS loop and Cron" --yes
+      - name: Verify command-center login gate and preserved signed Discord handler
+        env:
+          NEW_VERSION: ${{ steps.upload.outputs.version_id }}
+        run: |
+          node --input-type=module <<'NODE'
+          const base=process.env.WORKER_URL;
+          for(let n=1;n<=12;n++){
+            try{
+              const [get,post,home,overview,login]=await Promise.all([
+                fetch(base,{signal:AbortSignal.timeout(12000)}),
+                fetch(base,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)}),
+                fetch(base+'command-center/',{redirect:'manual',signal:AbortSignal.timeout(12000)}),
+                fetch(base+'command-center/api/overview',{redirect:'manual',signal:AbortSignal.timeout(12000)}),
+                fetch(base+'command-center/login',{redirect:'manual',signal:AbortSignal.timeout(12000)})
+              ]);
+              const marker=(await get.text()).trim();
+              const redirect=login.headers.get('location')||'';
+              const link=redirect.startsWith('https://discord.com/oauth2/authorize?');
+              const good=get.status===200&&marker==='Discord GPT Relay gpt-oss command-center ready.'
+                &&post.status===401&&home.status===302&&home.headers.get('location')==='/command-center/login'
+                &&overview.status===401&&login.status===302&&link;
+              console.log(JSON.stringify({attempt:n,gptossReady:get.status===200&&marker==='Discord GPT Relay gpt-oss command-center ready.',
+                unsignedDiscord:post.status,unauthenticatedHome:home.status,unauthenticatedApi:overview.status,loginRedirect:login.status}));
+              if(good)process.exit(0);
+            }catch{console.log('Readiness attempt inconclusive');}
+            if(n<12)await new Promise(r=>setTimeout(r,5000));
+          }
+          throw Error('Post-promotion private dashboard health/security check failed. Rollback required.');
+          NODE
+          npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/dashboard-after.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/dashboard-after.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const ids=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          if(ids.at(-1)!==process.env.NEW_VERSION)throw Error('Wrong version live; automatic rollback required.');
+          NODE
+      - name: Restore known GPT-OSS version if deployment outcome was bad
+        if: ${{ failure() && steps.promote.outcome != 'skipped' }}
+        env:
+          NEW_VERSION: ${{ steps.upload.outputs.version_id }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/dashboard-failure-current.txt
+          CURRENT="$(node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/dashboard-failure-current.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          console.log([...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]).at(-1)||'UNKNOWN');
+          NODE
+          )"
+          if [ "$CURRENT" = "$OLD_VERSION" ]; then echo 'Original already live'; exit 0; fi
+          test -n "$NEW_VERSION" && test "$CURRENT" = "$NEW_VERSION" || { echo 'Concurrent unknown version. Stop without blind overwrite.'; exit 1; }
+          npx --yes wrangler@4 versions deploy "$OLD_VERSION@100%" --name "$WORKER_NAME" --message "Restore last known GPT-OSS loop after failed private dashboard rollout" --yes
+          node --input-type=module <<'NODE'
+          const url=process.env.WORKER_URL;
+          for(let n=1;n<=8;n++){
+            try{
+              const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
+              if(r.status===200&&(await r.text()).trim()==='Discord GPT Relay gpt-oss pilot ready.')process.exit(0);
+            }catch{}
+            if(n<8)await new Promise(r=>setTimeout(r,5000));
+          }
+          throw Error('Rollback attempted; GPT-OSS health unverified.');
+          NODE
+      - name: Owner browser verification still required
+        if: ${{ success() }}
+        run: |
+          echo 'New private site routing and security are live. Do not assert that Discord OAuth login succeeded until the owner completes a browser login test.'
+          echo 'No PLM, YouTube, unrelated Workers, databases or Cron were modified.'
