@@ -1,15 +1,9 @@
-name: Private Command Center Guarded Release
+name: Approved Private Command Center Release Once
 on:
-  workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Type RELEASE-PRIVATE-DASHBOARD only after setting Discord OAuth Redirect and both Worker Secrets'
-        required: true
-        type: string
-      active_job_check:
-        description: 'Type NO-ACTIVE-JOB after /loop-status confirms no running task'
-        required: true
-        type: string
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/command-center-owner-approved.once'
 permissions:
   contents: read
 concurrency:
@@ -17,14 +11,15 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: ${{ github.event.head_commit.message == 'Run approved isolated Command Center release once' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 18
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CONFIRM: ${{ inputs.confirm }}
-      JOB_CHECK: ${{ inputs.active_job_check }}
+      CONFIRM: RELEASE-PRIVATE-DASHBOARD
+      JOB_CHECK: NO-ACTIVE-JOB
       WORKER_NAME: steep-glitter-b5cddiscord-ai-relay-lab
       WORKER_URL: https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev/
     steps:
@@ -37,6 +32,8 @@ jobs:
           set -euo pipefail
           test "$CONFIRM" = 'RELEASE-PRIVATE-DASHBOARD'
           test "$JOB_CHECK" = 'NO-ACTIVE-JOB'
+          test "$(cat preflight/command-center-owner-approved.once)" = 'APPROVED_ONCE:PRIVATE_DASHBOARD:DISCORD_ONLY'
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
           test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
           test -n "$CLOUDFLARE_API_TOKEN"
           node command-center/verify-isolation.mjs
