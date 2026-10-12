@@ -84,7 +84,8 @@ function renderAgents(n=0,mode='idle'){
 }
 function setButtons(){
  $('create').disabled=!runner||!!job&&['queued','claimed','quota_wait'].includes(job.status);
- $('stop').disabled=!runner||!job||!['queued','claimed','quota_wait'].includes(job.status);
+ // STOP remains accessible while execution flags are OFF; it cannot invoke the model.
+ $('stop').disabled=!job||!['queued','claimed','quota_wait'].includes(job.status);
  $('resume').disabled=!runner||!job||job.status!=='quota_wait';
 }
 async function refresh(){
