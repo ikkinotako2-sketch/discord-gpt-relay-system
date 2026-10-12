@@ -1,0 +1,32 @@
+name: Command Center Release Safety PR (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'command-center/release-d1-guard.mjs'
+      - 'command-center/release-d1-guard.test.mjs'
+      - 'command-center/release-workflow-safety.test.mjs'
+      - 'command-center/verify-isolation.mjs'
+      - '.github/workflows/command-center-guarded-release.yml'
+      - '.github/workflows/command-center-release-safety-pr.yml'
+permissions:
+  contents: read
+jobs:
+  offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check safe D1 response parser and exact production workflow gates
+        run: |
+          node --check command-center/release-d1-guard.mjs
+          node --check command-center/verify-isolation.mjs
+          node --test command-center/release-d1-guard.test.mjs command-center/release-workflow-safety.test.mjs
+          node command-center/verify-isolation.mjs
+      - name: Re-run existing owner dashboard and Discord regression suite
+        run: |
+          node --test command-center.test.mjs command-center-server.test.mjs worker-loop.test.mjs loop-d1.test.mjs loop-quality.test.mjs
+      - name: Confirm no production operations
+        run: echo 'OFFLINE_ONLY_PASS; no D1 query, Worker deploy, secret access or inference'
