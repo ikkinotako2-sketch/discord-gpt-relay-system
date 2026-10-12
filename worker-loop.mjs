@@ -4,7 +4,7 @@
 import previousWorker, {validDiscordRequest, respondToDiscord} from './worker-relay.mjs';
 import {generateLoopStageWithWorkersAI,evaluateLoopFinalOutput,resolveLoopModel,GPT_OSS_MODEL} from './loop-quality.mjs';
 import {createDurableLoop, getLatestLoop, requestDurableStop, claimOneLoopStep, commitLoopOutput, failLoopClaim} from './loop-d1.mjs';
-import {handleDashboardRequest} from './command-center/server.mjs';
+import {handleDashboardRequest,dashboardConfigured} from './command-center/server.mjs';
 
 const COMMANDS = new Set(['loop','loop-status','loop-stop']);
 const say = content => String(content).slice(0,1900);
@@ -114,8 +114,12 @@ export default {
       try {
         const model=resolveLoopModel(env);
         await env.LOOP_DB.prepare('SELECT run_id FROM relay_loop_jobs LIMIT 1').first();
+        if(env.DASHBOARD_ENABLED==='true' && !dashboardConfigured(env))
+          return new Response('Private Command Center configuration incomplete',{status:503});
         return new Response(model===GPT_OSS_MODEL
-          ? 'Discord GPT Relay gpt-oss pilot ready.'
+          ? (dashboardConfigured(env)
+            ? 'Discord GPT Relay gpt-oss command-center ready.'
+            : 'Discord GPT Relay gpt-oss pilot ready.')
           : 'Discord GPT Relay loop-v2 task-focus ready.');
       } catch { return new Response('Loop configuration or D1 migration unavailable',{status:503}); }
     }
