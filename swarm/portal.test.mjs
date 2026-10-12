@@ -47,7 +47,7 @@ test('portal only accepts exact same-origin routes, no arbitrary prefix',async()
  const {env}=fixture();
  assert.equal((await handleSwarmRoute(new Request('https://example.invalid/command-center/swarm/'),env)).status,404);
  assert.equal((await handleSwarmRoute(new Request(COMMAND_CENTER_ORIGIN+'/command-center/swarm-bad'),env)).status,404);
- assert.equal((await handleSwarmRoute(new Request(URL,{method:'POST'}),env)).status,405);
+ assert.equal((await handleSwarmRoute(new Request(PAGE_URL,{method:'POST'}),env)).status,405);
 });
 test('page renderer never sets public-cache policy',async()=>{
  const response=await renderPrivateSwarmPage();
