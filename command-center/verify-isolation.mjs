@@ -52,4 +52,7 @@ assert.ok(!release.includes('triggers deploy')&&!release.includes('d1 migrations
   'No D1 migration or Cron deployment');
 assert.ok(!/d1 execute .*--file|d1 (?:delete|import|create|migrations)/i.test(release),
   'No D1 writes or migrations permitted in dashboard release');
+const d1ReadSecret='CLOUDFLARE_API_TOKEN: '+String.fromCharCode(36)+'{{ secrets.DISCORD_D1_READ_TOKEN }}';
+assert.equal(release.split(d1ReadSecret).length-1,2,
+  'D1 checks must use dedicated D1 Read token; never grant D1 access to Worker deployment token');
 console.log('ISOLATION_GUARD_PASS: Discord-only Worker/D1. No YouTube/PLM targets. Offline build only.');
