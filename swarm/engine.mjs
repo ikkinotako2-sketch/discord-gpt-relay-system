@@ -44,9 +44,13 @@ export async function createTask(db,{runId,ownerId,task,cycles=1,now=Date.now()}
     await db.prepare("INSERT INTO swarm_jobs (run_id,owner_id,task,cycles,status,active_slot,created_at,updated_at,expires_at) VALUES (?,?,?,?,'queued',1,?,?,?)")
       .bind(runId,ownerId,task.trim(),cycles,now,now,now+WEEK).run();
     return {status:'created',runId};
-  }catch{
+  }catch(error){
+    // Distinguish an ordinary unique active-slot conflict from an actual D1 outage.
     const old=await db.prepare('SELECT run_id,owner_id FROM swarm_jobs WHERE run_id=?').bind(runId).first();
-    return old?.owner_id===ownerId?{status:'existing',runId}:{status:'busy'};
+    if(old?.owner_id===ownerId)return {status:'existing',runId};
+    const active=await db.prepare('SELECT run_id FROM swarm_jobs WHERE active_slot=1 LIMIT 1').first();
+    if(active)return {status:'busy'};
+    throw error;
   }
 }
 export async function requestStop(db,ownerId,now=Date.now()){
@@ -124,4 +128,13 @@ export async function ownerSnapshot(db,ownerId,limit=10){
   return {schema:'discord-swarm.v1',provider:'not_assigned',realSessions:0,
     roles:ROLES.map(x=>({id:x.id,label:x.label,purpose:x.purpose})),
     jobs:r.results.map(visibleState),note:'6 model roles (sequential); not 6 consumer ChatGPT sessions'};
+}
+
+
+export async function peekRunnableTask(db,now=Date.now()){
+  requireDb(db);
+  // Also terminate stale claimed jobs, but do not reissue a possibly completed inference.
+  await expireClaims(db,now);
+  return await db.prepare("SELECT run_id,owner_id,status FROM swarm_jobs WHERE active_slot=1 AND status IN ('queued','quota_wait') AND stop_requested=0 AND expires_at>? ORDER BY created_at ASC LIMIT 1")
+    .bind(now).first()||null;
 }
