@@ -1,4 +1,6 @@
 import test from 'node:test';
+// Always run the inline browser STOP regression under the existing offline CI.
+import './portal-client-stop.test.mjs';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
