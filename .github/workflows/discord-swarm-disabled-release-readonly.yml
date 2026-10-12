@@ -113,3 +113,4 @@ jobs:
           NODE
       - name: Verify no model calls, D1 writes, deployment, or secrets changes
         run: echo 'READ_ONLY_RELEASE_PREFLIGHT_COMPLETE_NO_DEPLOY_NO_MODEL_INFERENCE_NO_D1_WRITE_NO_SECRET_CHANGE'
+# 2026-10-12 owner-approved six-agent 1-cycle smoke preflight recheck; READ ONLY; no execution or flags.
