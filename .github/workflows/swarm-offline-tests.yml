@@ -1,0 +1,38 @@
+name: Six-agent swarm isolated offline tests
+on:
+  push:
+    branches: ['feature/isolated-six-agent-command-center-20261012']
+    paths: ['.github/workflows/swarm-offline-tests.yml']
+  pull_request:
+    paths:
+      - 'swarm/**'
+      - '.github/workflows/swarm-offline-tests.yml'
+permissions:
+  contents: read
+jobs:
+  offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Protect existing Discord, YouTube and Project Love Machine paths
+        run: node swarm/verify-isolation.mjs
+      - name: Run six-agent SQLite state machine tests (NO CLOUDFLARE)
+        run: node --test swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs
+      - name: Validate staged Workers AI adapter and neon HTML source
+        run: |
+          node --check swarm/engine.mjs
+          node --check swarm/runner.mjs
+          node --check swarm/api.mjs
+          node --check swarm/portal.mjs
+          node --check swarm/quota.mjs
+          node --check swarm/cron.mjs
+          node --check swarm/handoff.mjs
+          node --check swarm/verify-isolation.mjs
+          test -s swarm/command-center-preview.html
+          echo 'OFFLINE_ONLY_PASS — no secrets, deploy, D1 migration or inference'

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>NEON SWARM — Discord Relay Lab / Staging</title>
+<style>
+:root{font-family:system-ui,"Noto Sans JP",sans-serif;color:#f7e7ff;background:#08070e}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 45% -20%,#3f193f70,transparent 42%),#08070e;min-height:100vh}
+button,input,select{font:inherit}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #74f7eb;outline-offset:3px}
+.page{max-width:1450px;margin:auto;padding:18px;display:grid;gap:14px}
+header,.card{border:1px solid #85366d;background:#100d1b;border-radius:12px;box-shadow:0 0 22px #e62ca510}
+header{padding:18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-top:3px solid #fe3fbf}
+.eyebrow{font:700 10px monospace;letter-spacing:2.6px;color:#f58fdc}
+h1{font-size:clamp(24px,4vw,38px);margin:2px 0;color:#ff5ac1;letter-spacing:2px;text-shadow:0 0 25px #e6299a65}
+small,.muted{color:#a99cb7}.pill{display:inline-block;padding:7px 11px;border:1px solid #ff4abb;border-radius:25px;color:#ff7bcd;font-size:12px;font-weight:bold}
+.topline{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.card{padding:18px;min-width:0}.metric b{font:700 clamp(20px,3vw,30px) monospace;color:#70f7df;display:block;margin-top:5px}.metric span{font-size:12px;color:#bdaacb}
+.columns{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(290px,1fr);gap:12px}
+h2{font-size:15px;color:#ff81d2;letter-spacing:1px;margin:0 0 17px}
+.route{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;position:relative}
+.agent{position:relative;z-index:1;min-height:150px;border:1px solid #79305f;background:radial-gradient(circle at top,#50204b45,#191023);border-radius:12px;padding:17px 12px;text-align:center;transition:transform .25s,border-color .25s,box-shadow .25s}
+.agent.active{border-color:#72ffe9;box-shadow:inset 0 0 16px #34f3cf20,0 0 22px #5affd240;transform:translateY(-2px)}
+.agent.done{border-color:#2b967f}.agent.wait{opacity:.58}.orb{display:grid;place-items:center;margin:0 auto 9px;width:54px;height:54px;border-radius:50%;background:#220e2e;border:2px solid #e646b5;font-size:24px;box-shadow:0 0 20px #ff3eb043}
+.agent.active .orb{animation:pulse 1.35s ease-in-out infinite;border-color:#69ffe2}
+@keyframes pulse{0%,100%{box-shadow:0 0 16px #69ffe226}50%{box-shadow:0 0 30px #69ffe2a6}}
+.agent strong{display:block;font-size:14px}.agent p{color:#a69bb3;font-size:11px;line-height:1.55;min-height:34px}
+.agent .state{font:700 10px monospace;color:#68eed2}
+.flowbox{padding-top:12px;display:flex;align-items:center;gap:9px;color:#b3a3c2;font-size:12px}
+.line{height:4px;border-radius:9px;flex:1;background:#3a2145;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,#ff39bd,#66f9df);width:0;transition:width .3s}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+button{cursor:pointer;border:1px solid #f752b6;border-radius:8px;background:#642055;color:#fff;padding:11px 14px;font-weight:700;font-size:13px}
+button.ghost{background:#181522;color:#d8c3df;border-color:#5e4d73}button.stop{border-color:#f37b80;background:#67222d}
+button:disabled{opacity:.45;cursor:not-allowed}
+label{font-size:12px;color:#beafc7;display:block;margin:8px 0}
+input[type=text],select{padding:12px;width:100%;background:#100c1b;color:#fff;border:1px solid #76466d;border-radius:8px}
+.summary{white-space:pre-wrap;line-height:1.7;min-height:100px;color:#bceee8;font-size:12px;background:#0c1520;padding:13px;border-radius:8px;border:1px solid #1c554f}
+.log{height:190px;overflow:auto;background:#0b0b17;color:#b3fcf0;padding:13px;font:11px/1.85 monospace;white-space:pre-wrap;border:1px solid #3d2a4e;border-radius:8px}
+footer{font-size:12px;color:#c9a2c2;line-height:1.8}
+.glow{color:#74f2dd}.warn{color:#ffd185}
+input[type=file]{max-width:100%;font-size:12px}
+@media(max-width:800px){.topline{grid-template-columns:repeat(2,minmax(0,1fr))}.columns{grid-template-columns:1fr}}
+@media(max-width:520px){.route{grid-template-columns:repeat(2,minmax(0,1fr))}.agent{min-height:138px}.page{padding:10px}.card{padding:13px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="page">
+<header><div><div class="eyebrow">DISCORD GPT RELAY SYSTEM // ISOLATED STAGING</div>
+<h1>NEON SWARM</h1><small>6-ROLE AUTONOMOUS AI CONTROL CENTER</small></div>
+<span class="pill" id="topStatus">● OFFLINE DEMO / NO REAL AI</span></header>
+<section class="topline" aria-label="指標">
+<div class="card metric"><span>実行状態</span><b id="status">待機</b></div>
+<div class="card metric"><span>完了ステージ</span><b id="counter">0 / 6</b></div>
+<div class="card metric"><span>作業サイクル</span><b id="cycleMetric">1 / 1</b></div>
+<div class="card metric"><span>実際のAPI呼び出し</span><b>0</b></div>
+</section>
+<div class="columns">
+<section class="card"><h2>◈ AI AGENT NETWORK</h2>
+<div class="route" id="route" aria-live="polite"></div>
+<div class="flowbox"><span>START</span><div class="line"><div class="fill" id="bar"></div></div><span id="percent">0%</span></div>
+<div class="actions">
+<button id="step">次のAIへ（模擬）</button>
+<button id="auto">自動ループ（模擬）</button>
+<button id="quota" class="ghost">上限到達を再現</button>
+<button id="resume" class="ghost">利用枠回復を再現</button>
+<button id="stop" class="stop">緊急STOP</button>
+</div>
+<p class="muted" style="font-size:12px">画面の進行はすべてシミュレーションです。AI推論・Discord投稿・Cloudflare操作・課金は一切行いません。</p>
+</section>
+<section class="card"><h2>▣ TASK CONTROL</h2>
+<label for="task">AIに任せる仕事（模擬入力）</label>
+<input type="text" id="task" maxlength="280" value="Bluesky自動化を調査・実装・検証する計画を作る">
+<label for="cycles">改善サイクルの上限</label>
+<select id="cycles"><option value="1">1周 = 最大6呼び出し</option><option value="2">2周 = 最大12呼び出し</option><option value="3">3周 = 最大18呼び出し</option></select>
+<h2 style="margin-top:24px">◉ LAST CHECKPOINT</h2>
+<div class="summary" id="checkpoint">チェックポイントなし。STEPを押して模擬進行できます。</div>
+<div class="actions">
+<button class="ghost" id="export">引き継ぎJSONを保存</button>
+<label style="cursor:pointer">JSONを読み込む<input type="file" id="import" accept="application/json,.json"></label>
+</div>
+</section>
+</div>
+<section class="card"><h2>⌁ EXECUTION LOG — SIMULATED</h2><div class="log" id="log"></div></section>
+<footer><strong class="warn">安全設計：</strong>公開中のDiscord GPT-OSSの本番A→Bループとは接続していません。実際の6役割化には、専用D1移行、認証済み管理API、モデルの実呼び出し、費用枠検査、所有者承認、本番検証が必要です。利用制限を回避するためのChatGPT会話の切替は行いません。</footer>
+</div>
+<script>
+(() => {
+'use strict';
+const roles=[
+ ['🧠','司令塔AI','計画・割当'],['🔎','調査AI','情報収集・整理'],
+ ['💻','開発AI','実装・設計'],['🛡️','検証AI','安全・品質検査'],
+ ['🛠️','改善AI','修正・最適化'],['💾','記憶AI','状態保存・引き継ぎ']
+];
+const $=id=>document.getElementById(id);
+const state={calls:0,cycles:1,mode:'idle',task:$('task').value};
+let interval=null,events=[];
+const addLog=s=>{events.push(new Date().toLocaleTimeString('ja-JP')+' '+s);events=events.slice(-80);$('log').textContent=events.join('\n');$('log').scrollTop=$('log').scrollHeight};
+const max=()=>state.cycles*6;
+function draw(){
+ $('route').replaceChildren();
+ roles.forEach(([emoji,label,description],i)=>{
+   const d=document.createElement('div');d.className='agent';
+   const completedCycles=Math.floor(state.calls/6);
+   const activeIndex=state.calls%6;
+   const finished=state.mode==='completed'||(completedCycles>=state.cycles);
+   d.classList.toggle('done',finished||i<activeIndex);
+   d.classList.toggle('active',!finished&&i===activeIndex&&state.mode==='running');
+   d.classList.toggle('wait',state.mode==='quota_wait');
+   const orb=document.createElement('div');orb.className='orb';orb.textContent=emoji;
+   const name=document.createElement('strong');name.textContent=label;
+   const desc=document.createElement('p');desc.textContent=description;
+   const tag=document.createElement('span');tag.className='state';
+   tag.textContent=finished?'COMPLETE':(i<activeIndex?'DONE':i===activeIndex?'NEXT':'STANDBY');
+   d.append(orb,name,desc,tag);$('route').append(d);
+ });
+ $('status').textContent={idle:'待機',running:'模擬運転',quota_wait:'上限待機',stopped:'停止',completed:'完了'}[state.mode];
+ $('counter').textContent=state.calls+' / '+max();
+ $('cycleMetric').textContent=Math.min(state.cycles,Math.floor(state.calls/6)+1)+' / '+state.cycles;
+ const pct=Math.round(state.calls/max()*100);$('bar').style.width=pct+'%';$('percent').textContent=pct+'%';
+ $('step').disabled=['quota_wait','stopped','completed'].includes(state.mode);
+ $('auto').disabled=['quota_wait','stopped','completed'].includes(state.mode);
+ $('resume').disabled=state.mode!=='quota_wait';
+ $('cycles').disabled=state.calls>0;
+}
+function halt(){if(interval!==null){clearInterval(interval);interval=null}}
+function step(){
+ if(['quota_wait','stopped','completed'].includes(state.mode))return;
+ state.mode='running';
+ const r=roles[state.calls%6];
+ state.calls++;
+ const line='完了（模擬）：'+r[1]+' / '+r[2]+'。ここで結果を保存し次の担当へ引き継ぎます。';
+ $('checkpoint').textContent='依頼：'+state.task+'\n'+line+'\nステージ '+state.calls+'/'+max();
+ addLog('[DEMO] '+line);
+ if(state.calls>=max()){state.mode='completed';addLog('[DEMO] 上限内で完了');halt()}
+ draw();
+}
+$('step').onclick=step;
+$('auto').onclick=()=>{halt();state.mode='running';draw();addLog('[DEMO] 自動進行開始');interval=setInterval(step,900)};
+$('quota').onclick=()=>{halt();if(!['stopped','completed'].includes(state.mode)){state.mode='quota_wait';addLog('[DEMO] 上限到達→チェックポイントを保持して待機');draw()}};
+$('resume').onclick=()=>{if(state.mode==='quota_wait'){state.mode='idle';addLog('[DEMO] 利用枠回復→再開可能');draw()}};
+$('stop').onclick=()=>{halt();state.mode='stopped';addLog('[DEMO] STOPが押されました');draw()};
+$('cycles').onchange=()=>{if(state.calls===0){state.cycles=Number($('cycles').value);draw()}};
+$('task').oninput=()=>{if(state.calls===0)state.task=$('task').value};
+$('export').onclick=()=>{
+ const data={schema:'neon-swarm-demo-v1',calls:state.calls,cycles:state.cycles,mode:state.mode,task:state.task,
+   checkpoint:$('checkpoint').textContent,events};
+ const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+ const a=document.createElement('a');a.href=url;a.download='neon-swarm-demo-checkpoint.json';a.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+ addLog('[DEMO] JSONをエクスポート');
+};
+$('import').onchange=async e=>{
+ const file=e.target.files?.[0];if(!file||file.size>100000)return;
+ try{
+ const x=JSON.parse(await file.text());
+ if(x.schema!=='neon-swarm-demo-v1'||!Number.isInteger(x.calls)||!Number.isInteger(x.cycles)||
+   x.cycles<1||x.cycles>3||x.calls<0||x.calls>x.cycles*6||
+   !['idle','running','quota_wait','stopped','completed'].includes(x.mode)||typeof x.task!=='string'||x.task.length>280)
+   throw Error('Invalid snapshot');
+ halt();state.calls=x.calls;state.cycles=x.cycles;state.mode=x.mode==='running'?'idle':x.mode;
+ state.task=x.task;$('task').value=x.task;$('cycles').value=String(x.cycles);
+ $('checkpoint').textContent=String(x.checkpoint||'').slice(0,3000);
+ events=Array.isArray(x.events)?x.events.filter(s=>typeof s==='string').slice(-60).map(s=>s.slice(0,300)):[];
+ addLog('[DEMO] 引き継ぎチェックポイントを復元');draw();
+ }catch{addLog('[DEMO] ファイルを読み込めませんでした')}
+ e.target.value='';
+};
+addLog('[DEMO] ローカル管理画面起動 / 外部サービス未接続');
+draw();
+})();
+</script>
+</body>
+</html>
