@@ -40,7 +40,7 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
   if(url.pathname===BASE+'overview'&&request.method==='GET'){
     try {
       const snapshot=await ownerSnapshot(env.LOOP_DB,session.id);
-      return json({...snapshot,csrfToken:session.csrf,stateSource:'discord_only_d1',live:true,modelLinked:false,runnerEnabled:env?.SWARM_RUNNER_ENABLED==='true'&&env?.SWARM_EXECUTION_APPROVED==='true'});
+      return json({...snapshot,csrfToken:session.csrf,stateSource:'discord_only_d1',live:true,modelLinked:false,runnerEnabled:swarmModeEnabled(env)});
     }catch{return json({error:'READ_UNAVAILABLE'},503);}
   }
   if(request.method!=='POST'||!['create','stop','resume'].includes(url.pathname.slice(BASE.length)))
