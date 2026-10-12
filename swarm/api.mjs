@@ -46,9 +46,16 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
   if(request.method!=='POST'||!['create','stop','resume'].includes(url.pathname.slice(BASE.length)))
     return json({error:'NOT_FOUND'},404);
   if(!sameOriginWrite(request,session))return json({error:'CSRF_OR_ORIGIN'},403);
-  if(!swarmModeEnabled(env))return json({error:'RUNNER_NOT_ENABLED'},503);
   let body;
   try{body=await inputJson(request);}catch{return json({error:'INVALID_BODY'},400);}
+  // Emergency STOP is an owner-authenticated safety action, not an AI invocation.
+  // Keep it available when the runner is disabled so already queued or claimed
+  // jobs can still be stopped. Creating/resuming jobs remains hard-gated.
+  if(url.pathname===BASE+'stop'){
+    try{return json(await requestStop(env.LOOP_DB,session.id));}
+    catch{return json({error:'OPERATION_UNAVAILABLE'},503);}
+  }
+  if(!swarmModeEnabled(env))return json({error:'RUNNER_NOT_ENABLED'},503);
   try{
     if(url.pathname===BASE+'create'){
       if(typeof body.task!=='string'||!body.task.trim()||body.task.length>1000||
@@ -73,9 +80,6 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
       const result=await createTask(env.LOOP_DB,{runId,ownerId:session.id,
         task:body.task,cycles:body.cycles});
       return json(result,result.status==='created'?201:result.status==='busy'?409:200);
-    }
-    if(url.pathname===BASE+'stop'){
-      return json(await requestStop(env.LOOP_DB,session.id));
     }
     if(url.pathname===BASE+'resume'){
       if(typeof body.runId!=='string'||!(/^[A-Za-z0-9_-]{1,100}$/).test(body.runId))

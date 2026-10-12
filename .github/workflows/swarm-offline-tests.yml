@@ -23,7 +23,7 @@ jobs:
       - name: Protect existing Discord, YouTube and Project Love Machine paths
         run: node swarm/verify-isolation.mjs
       - name: Run six-agent SQLite state machine tests (NO CLOUDFLARE)
-        run: node --test swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs
+        run: node --test swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs swarm/schema-readiness.test.mjs
       - name: Validate staged Workers AI adapter and neon HTML source
         run: |
           node --check swarm/engine.mjs
