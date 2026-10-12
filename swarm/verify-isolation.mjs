@@ -14,7 +14,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const base=process.env.GITHUB_BASE_REF;
   const stackedBase='feature/isolated-six-agent-command-center-20261012';
   const stackedHead='feature/swarm-six-role-safe-wiring-20261012';
-  if(base!=='main' && (base!==stackedBase||process.env.GITHUB_HEAD_REF!==stackedHead))
+  // After PR #1 lands, the SAME allowlisted integration branch must target main.
+  if(![stackedBase,'main'].includes(base)||process.env.GITHUB_HEAD_REF!==stackedHead)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -22,7 +23,7 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const extra=new Set(['worker-loop.mjs','command-center/server.mjs',
     '.github/workflows/swarm-exclusive-integration-tests.yml']);
   const illegal=paths.filter(path=>path!=='.github/workflows/swarm-offline-tests.yml'&&
-    !path.startsWith('swarm/')&&!(base===stackedBase&&extra.has(path)));
+    !path.startsWith('swarm/')&&!extra.has(path));
   if(illegal.length)throw Error('Protected production path touched: '+illegal.join(', '));
   process.stdout.write('ISOLATED_PR_PATHS_PASS '+paths.length+' changed files\n');
 }
