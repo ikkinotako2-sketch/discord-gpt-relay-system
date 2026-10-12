@@ -1,5 +1,20 @@
 # Discord AI Relay Lab — verified status (2026-10-12)
 
+## FAST ISOLATED RELEASE READINESS — 2026-10-12
+
+- User explicitly requires the Command Center be finished quickly **without interfering with YouTube automation or any other project**.
+- **Only** this repository `ikkinotako2-sketch/discord-gpt-relay-system` has been modified. No YouTube or Project Love Machine repository, Cloudflare Worker or D1 was read/written as part of this task.
+- Offline Command Center source is complete: mobile-friendly A→B→A→B graph, per-stage owner-only handoff content, D1 history, owner-authenticated start/STOP, 15-second display refresh.
+- `command-center/verify-isolation.mjs` checks **exactly one** Discord-only Worker `steep-glitter-b5cddiscord-ai-relay-lab`, D1 `discord-relay-loop-state` with exact UUID and GPT-OSS binding. Build CI runs Wrangler **dry-run only** and makes no production writes.
+- Full regression CI: [38195334162](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38195334162) **94/94 PASS**. Command Center focused CI: [38195217680](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38195217680) **60/60 PASS**, isolation guard PASS, Wrangler dry-run PASS. Subsequent commits to this repository have continued to pass full CI.
+- `.github/workflows/command-center-guarded-release.yml` is **prepared but NOT executed**. Manual, exact-approval trigger. Before any production write, checks current Discord Worker version, secret **names** only, all five Discord commands, full tests, build, isolated D1 and Cloudflare account. Inactive upload and preview precede any promotion. After promotion checks OAuth redirect/authorization, signature rejection, and exact version. Automatic rollback targets last verified GPT-OSS version `64b48d3f-a427-4229-af27-c8c3710fa309` if new version fails health checks.
+- **Blocked from making site live:** Discord OAuth Redirect registration; new Cloudflare Worker secrets `DISCORD_OAUTH_CLIENT_SECRET` and `DASHBOARD_COOKIE_KEY`; user confirmation that latest GPT-OSS `/loop-status` is terminal. **Do not deploy or rotate secrets while a loop is active.**
+- **The live GPT-OSS Discord Worker remains unchanged by site development**. No additional Workers AI inference has been initiated.
+- Detailed single-workflow publication plan and exact user setup: [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md).
+- Shared Cloudflare account-wide resource quotas cannot be categorically guaranteed isolated, but these offline tests and guarded site launch invoke **no AI model**, avoid Cron changes and do not touch other resource IDs.
+
+---
+
 ## Command Center website — CODE COMPLETE / TESTS PASS / NOT DEPLOYED
 
 - User requested an eventual **web dashboard to see which AI roles or chat connectors exchange work**, with monitoring, task submission and STOP controls. The user wants to inspect and operate the loop from the same ChatGPT project, but the existing loop does not connect consumer ChatGPT conversations directly.
