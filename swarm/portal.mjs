@@ -2,6 +2,7 @@
 // Explicit SWARM_API_ENABLED and owner Discord OAuth session required.
 import {authenticateDashboard,dashboardConfigured,COMMAND_CENTER_ORIGIN} from '../command-center/server.mjs';
 import {handleSwarmApi} from './api.mjs';
+import {swarmModeEnabled} from './bridge.mjs';
 const PAGE='/command-center/swarm';
 const API='/command-center/api/swarm/';
 const HTML=`<!doctype html>
@@ -168,7 +169,7 @@ export async function handleSwarmRoute(request,env){
  if(url.pathname.startsWith(API))return handleSwarmApi(request,env);
  if(url.pathname!==PAGE&&url.pathname!==PAGE+'/')return new Response('Not found',{status:404});
  if(request.method!=='GET')return new Response('Method not allowed',{status:405});
- if(env?.SWARM_API_ENABLED!=='true'||!dashboardConfigured(env))
+ if(!swarmModeEnabled(env)||!dashboardConfigured(env))
    return new Response('Swarm dashboard unavailable',{status:503});
  const session=await authenticateDashboard(request,env);
  if(!session)return new Response(null,{status:302,headers:{...staticHeaders,Location:'/command-center/login'}});
