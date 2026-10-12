@@ -5,6 +5,9 @@ import previousWorker, {validDiscordRequest, respondToDiscord} from './worker-re
 import {generateLoopStageWithWorkersAI,evaluateLoopFinalOutput,resolveLoopModel,GPT_OSS_MODEL} from './loop-quality.mjs';
 import {createDurableLoop, getLatestLoop, requestDurableStop, claimOneLoopStep, commitLoopOutput, failLoopClaim} from './loop-d1.mjs';
 import {handleDashboardRequest,dashboardConfigured} from './command-center/server.mjs';
+import {swarmModeEnabled,isSwarmRoute,runExclusiveScheduledTick} from './swarm/bridge.mjs';
+import {handleSwarmRoute} from './swarm/portal.mjs';
+import {runConfiguredSwarmTick} from './swarm/cron.mjs';
 
 const COMMANDS = new Set(['loop','loop-status','loop-stop']);
 const say = content => String(content).slice(0,1900);
@@ -33,6 +36,7 @@ export async function handleLoopCommand(event,env,now=Date.now()) {
   if (!isOwner(event,env)) return 'この機能は実験管理者専用です。';
   if (!env.LOOP_DB?.prepare) return '専用のD1データベースが未接続です。';
   if (name==='loop') {
+    if(swarmModeEnabled(env))return '6役割AIの排他運転中です。既存2役割の新規ジョブ開始は停止しています。';
     if (!env.AI?.run) return 'AIバインディングが未接続です。';
     const task=option(event,'task');
     if (typeof task!=='string'||!task.trim()||task.length>1000) return 'タスクは1〜1000文字で指定してください。';
@@ -105,6 +109,11 @@ export default {
     // Private dashboard route is entirely separate from signed Discord interactions.
     // Disabled by default: requires explicitly configured OAuth and session secrets.
     const pathname=new URL(request.url).pathname;
+    if(isSwarmRoute(pathname)){
+      if(!swarmModeEnabled(env))return new Response('Six-role engine disabled',{status:503});
+      try{return await handleSwarmRoute(request,env);}
+      catch{console.error('swarm_dashboard_unavailable');return new Response('Swarm unavailable',{status:503});}
+    }
     if(pathname==='/command-center'||pathname.startsWith('/command-center/')){
       try{return await handleDashboardRequest(request,env);}
       catch{console.error('private_dashboard_request_failed');return new Response('Dashboard unavailable',{status:503});}
@@ -148,8 +157,12 @@ export default {
     }),env,ctx);
   },
   scheduled(controller,env,ctx) {
-    ctx.waitUntil(runOneScheduledLoopStep(env).catch(()=>{
-      console.error('discord_loop_cron_failed_no_retry');
+    ctx.waitUntil(runExclusiveScheduledTick(env,{
+      runLegacy:runOneScheduledLoopStep,
+      runSwarm:runConfiguredSwarmTick
+    }).catch(()=>{
+      // No retry: unknown inference outcomes might already have consumed provider quota.
+      console.error('discord_or_swarm_cron_failed_no_retry');
     }));
   }
 };
