@@ -81,10 +81,11 @@ jobs:
           const arr=JSON.parse(fs.readFileSync('/tmp/dashboard-secret-names.json','utf8'));
           if(!Array.isArray(arr))throw Error('Secret-name inventory unreadable.');
           const names=new Set(arr.map(x=>x.name));
-          for(const n of ['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID','DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY']){
-            if(!names.has(n))throw Error('Required private Worker secret missing: '+n);
-          }
-          console.log('Four required Discord-only secret names verified; no values read.');
+          const required=['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID','DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY'];
+          const missing=required.filter(n=>!names.has(n));
+          for(const name of required) console.log('SECRET_NAME_'+name+'='+(names.has(name)?'PRESENT':'MISSING'));
+          if(missing.length)throw Error('Missing required Discord-only Worker secret names: '+missing.join(', '));
+          console.log('Four required Discord-only secret names verified; no secret values read.');
           NODE
       - name: Check all five existing Discord commands without modifying any command
         env:
