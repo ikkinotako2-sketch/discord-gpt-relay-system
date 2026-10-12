@@ -1,0 +1,40 @@
+name: Discord Relay Failed Run Code Read-Only (NO DEPLOY)
+on:
+  push:
+    branches: [diagnostics/discord-run-stage-failure-20261012]
+    paths: ['.github/workflows/discord-readonly-failure-diagnosis.yml']
+permissions:
+  contents: read
+jobs:
+  check-only:
+    if: ${{ github.event.head_commit.message == 'Inspect failed Discord loop status once read only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 6c8ccd6aface937ab5dabef61cb64534
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Strict Discord D1-only read with no task text or prompts
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "ikkinotako2-sketch/discord-gpt-relay-system"
+          test "$GITHUB_REF" = "refs/heads/diagnostics/discord-run-stage-failure-20261012"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.command-center.toml
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT status,calls_used,last_error_code FROM relay_loop_jobs WHERE run_id='w56233a09efbf4d3c9b0ee4e630893ad4' LIMIT 1;" > /tmp/discord-error-codes.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const d=JSON.parse(fs.readFileSync('/tmp/discord-error-codes.json','utf8'));
+          if(!Array.isArray(d)||d.length!==1||d[0]?.success!==true||!Array.isArray(d[0].results))throw Error('D1_RESULT_INVALID');
+          const row=d[0].results[0];
+          if(!row){console.log('DISCORD_RUN_EXPIRED_OR_NOT_FOUND; no changes');process.exit(0)}
+          if(!['queued','claimed','completed','stopped','failed','unknown'].includes(row.status)||!Number.isSafeInteger(row.calls_used))throw Error('D1_ROW_INVALID');
+          const code=row.last_error_code;
+          if(code!==null && (typeof code!=='string'||!['MODEL_ERROR','INVALID_MODEL_OUTPUT','TASK_MISMATCH','CLAIM_EXPIRED','JOB_EXPIRED'].includes(code)))throw Error('D1_UNEXPECTED_ERROR_CODE');
+          console.log('DISCORD_READONLY_FAILURE_STATUS '+JSON.stringify({status:row.status,calls_used:row.calls_used,last_error_code:code}));
+          console.log('READ_ONLY_NO_WRITE_NO_DEPLOY');
+          NODE
