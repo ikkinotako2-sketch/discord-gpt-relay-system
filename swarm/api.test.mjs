@@ -69,6 +69,25 @@ test('CSRF-protected STOP is owner-scoped and resume cannot revive stopped job',
   const snapshot=await handleSwarmApi(req('overview',{headers:auth.headers}),auth.env);
   assert.equal((await snapshot.json()).jobs[0].status,'stopped');
 });
+test('owner can emergency STOP a pending swarm job even after execution permission is revoked',async()=>{
+ const {db}=fixture(),auth=await sessionFixture(db);
+ const created=await handleSwarmApi(write('create',auth,{task:'safe existing work',cycles:1}),auth.env,{runIdFactory:()=> 'stop_after_disable'});
+ assert.equal(created.status,201);
+ const off={...auth.env,SWARM_RUNNER_ENABLED:'false',SWARM_EXECUTION_APPROVED:'false',SWARM_EXCLUSIVE_MODE:'false'};
+ assert.equal((await handleSwarmApi(write('create',auth,{task:'never created',cycles:1}),off)).status,503);
+ assert.equal((await handleSwarmApi(write('resume',auth,{runId:'stop_after_disable'}),off)).status,503);
+ const withoutCsrf=write('stop',auth);
+ withoutCsrf.headers.delete('X-CSRF-Token');
+ assert.equal((await handleSwarmApi(withoutCsrf,off)).status,403);
+ const stopped=await handleSwarmApi(write('stop',auth),off);
+ assert.equal(stopped.status,200);
+ assert.equal((await stopped.json()).status,'stopped');
+ const overview=await handleSwarmApi(req('overview',{headers:auth.headers}),off);
+ assert.equal(overview.status,200);
+ const snapshot=await overview.json();
+ assert.equal(snapshot.runnerEnabled,false);
+ assert.equal(snapshot.jobs[0].status,'stopped');
+});
 test('invalid user inputs do not create jobs; no information leaked on errors',async()=>{
   const {db}=fixture(),auth=await sessionFixture(db);
   assert.equal((await handleSwarmApi(write('create',auth,{task:'',cycles:1}),auth.env)).status,400);
