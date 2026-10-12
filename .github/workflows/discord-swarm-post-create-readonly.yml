@@ -101,3 +101,4 @@ jobs:
           console.log('SWARM_EXECUTION_FLAGS_OFF_VERIFIED: 4 of 4 permission flags absent or explicitly false; no secrets or values printed');
           console.log('READ_ONLY_SETTINGS_CHECK_NO_WORKER_CHANGE');
           NODE
+# Post-release verify owner-approved six-role code-only deployment: flags OFF, 0 swarm rows, 0 legacy active jobs.
