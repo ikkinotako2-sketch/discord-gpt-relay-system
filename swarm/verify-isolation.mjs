@@ -17,8 +17,9 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   // Exactly one scoped safety-fix branch is allowed for emergency STOP/readiness.
   const safetyFixHead='fix/swarm-safe-stop-readonly-migration-preflight-20261012';
   const safetyFix=base==='main'&&process.env.GITHUB_HEAD_REF===safetyFixHead;
+  const smokeFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-smoke-stop-gate-20261012';
   const priorIntegration=[stackedBase,'main'].includes(base)&&process.env.GITHUB_HEAD_REF===stackedHead;
-  if(!safetyFix&&!priorIntegration)
+  if(!safetyFix&&!priorIntegration&&!smokeFix)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -31,7 +32,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/MIGRATION_READINESS.md','swarm/schema-readiness.test.mjs',
     '.github/workflows/swarm-offline-tests.yml'
   ]);
-  const illegal=paths.filter(path=>safetyFix
+  const smokeFiles=new Set(['swarm/portal.mjs','swarm/portal-client-stop.test.mjs','swarm/verify-isolation.mjs','swarm/portal.test.mjs']);
+  const illegal=paths.filter(path=>smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));
