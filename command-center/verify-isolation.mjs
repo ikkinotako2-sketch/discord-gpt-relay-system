@@ -46,7 +46,7 @@ const safeRead = 'd1 execute discord-relay-loop-state --remote --config wrangler
 const count=(release.match(/d1 execute /g)||[]).length;
 assert.equal(count,2,'Exactly two D1 read-only checks are required');
 assert.equal(release.split(safeRead).length-1,2,'Only exact Discord-only active-job SELECT checks may run');
-assert.equal((release.match(/node command-center\\/release-d1-guard\\.mjs \\/tmp\\/d1-before-/g)||[]).length,2,
+assert.equal(release.split('node command-center/release-d1-guard.mjs /tmp/d1-before-').length-1,2,
   'Every D1 query must have strict fail-closed response validation');
 assert.ok(!release.includes('triggers deploy')&&!release.includes('d1 migrations'),
   'No D1 migration or Cron deployment');
