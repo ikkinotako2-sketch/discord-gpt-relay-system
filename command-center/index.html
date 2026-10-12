@@ -79,7 +79,7 @@ th,td{padding:12px;border-bottom:1px solid #293b52}th{color:#9ab0c8;font-size:.8
   <div class="card kpi"><div class="caption">実行中のループ</div><div class="big" id="activeCount">—</div><div class="caption">同時実行上限：1</div></div>
   <div class="card kpi"><div class="caption">AIの接続</div><div class="big">A → B</div><div class="caption">計画AI → 作成AI</div></div>
   <div class="card kpi"><div class="caption">呼び出し済み</div><div class="big" id="callCount">— / 4</div><div class="caption">最大2周</div></div>
-  <div class="card kpi"><div class="caption">モデル</div><div class="big" style="font-size:1.38rem">GPT-OSS 20B</div><div class="caption">Cloudflare Workers AI</div></div>
+  <div class="card kpi"><div class="caption">モデル</div><div class="big" id="modelName" style="font-size:1.38rem">未接続</div><div class="caption">Cloudflare Workers AI</div></div>
  </section>
  <div class="sections">
   <section class="card" aria-labelledby="diagramTitle">
@@ -178,6 +178,7 @@ async function refresh(){
    if(!data.schema||data.schema!=='ai-relay-dashboard.v1')throw Error('Unexpected API response');
    authenticated=true;
    csrf=data.csrfToken;
+   setText('modelName',data.modelName||'モデル確認待ち');
    $('modeBadge').className='pill green';
    setText('modeBadge','● 管理者接続済み');
    $('securityBanner').hidden=true;
@@ -204,6 +205,7 @@ $('stopButton').addEventListener('click',()=>action('stop'));
 $('refresh').addEventListener('click',()=>{if(authenticated)refresh();else setText('controlMessage','プレビューです。認証付きAPIへの接続後に更新可能になります。');});
 setButton(false,false);
 setText('activeCount','デモ');
+setText('modelName','サンプル（未接続）');
 setText('callCount','4 / 4');
 for(let i=1;i<=4;i++)$('step'+i).classList.add('done');
 if(location.pathname.startsWith('/command-center')&&location.hostname.endsWith('workers.dev'))refresh();
