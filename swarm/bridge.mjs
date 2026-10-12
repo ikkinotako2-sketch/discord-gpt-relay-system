@@ -13,7 +13,7 @@ export function swarmModeEnabled(env,now=Date.now()) {
   // This cannot cancel a model request already in flight.
   if(env?.SWARM_DAILY_CALL_CAP==='6'){
     const raw=env?.SWARM_SMOKE_EXPIRES_AT;
-    if(typeof raw!=='string'||!/^\\d{13}$/.test(raw))return false;
+    if(typeof raw!=='string'||!/^\d{13}$/.test(raw))return false;
     const expiry=Number(raw);
     if(!Number.isSafeInteger(expiry)||!Number.isFinite(now)||
        expiry<=now||expiry-now>20*60*1000)return false;
