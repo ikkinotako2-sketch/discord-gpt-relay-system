@@ -13,7 +13,7 @@ const CLIENT_ID='1558705011339427840';
 const COOKIE='dc_session';
 const STATE_COOKIE='dc_oauth_state';
 const MAX_SESSION_MS=60*60*1000;
-const authReady=env=>env?.DASHBOARD_ENABLED==='true'&&
+export const dashboardConfigured=env=>env?.DASHBOARD_ENABLED==='true'&&
   typeof env?.DISCORD_OAUTH_CLIENT_SECRET==='string'&&env.DISCORD_OAUTH_CLIENT_SECRET.length>15&&
   typeof env?.DASHBOARD_COOKIE_KEY==='string'&&env.DASHBOARD_COOKIE_KEY.length>=32&&
   /^\d{15,22}$/.test(String(env?.DISCORD_ALLOWED_USER_ID||''))&&!!env?.LOOP_DB?.prepare;
@@ -66,7 +66,7 @@ function constantTimeEquals(a,b){
   return diff===0;
 }
 export async function createDashboardSession(userId,env,now=Date.now()){
-  if(!authReady(env)||String(userId)!==String(env.DISCORD_ALLOWED_USER_ID))
+  if(!dashboardConfigured(env)||String(userId)!==String(env.DISCORD_ALLOWED_USER_ID))
     throw Error('Unauthorized dashboard session');
   const payload=encoded(new TextEncoder().encode(JSON.stringify({
     id:String(userId),exp:now+MAX_SESSION_MS,csrf:crypto.randomUUID()
@@ -74,7 +74,7 @@ export async function createDashboardSession(userId,env,now=Date.now()){
   return payload+'.'+await mac(payload,env.DASHBOARD_COOKIE_KEY);
 }
 export async function authenticateDashboard(request,env,now=Date.now()){
-  if(!authReady(env))return null;
+  if(!dashboardConfigured(env))return null;
   const raw=cookie(request,COOKIE);
   if(!raw||raw.length>2048||raw.split('.').length!==2)return null;
   const [payload,signature]=raw.split('.');
@@ -140,7 +140,7 @@ export async function handleDashboardRequest(request,env){
   const url=new URL(request.url);
   if(url.origin!==COMMAND_CENTER_ORIGIN||!url.pathname.startsWith(BASE))
     return plain('Unknown dashboard origin or path',404);
-  if(!authReady(env))return plain('Private dashboard not configured',503);
+  if(!dashboardConfigured(env))return plain('Private dashboard not configured',503);
   if(url.pathname===BASE+'/login'&&request.method==='GET'){
     const state=crypto.randomUUID();
     const authorize=new URL('https://discord.com/oauth2/authorize');
