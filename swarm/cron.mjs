@@ -5,7 +5,7 @@ import {parseDailyCap,reserveDailyFreeCall} from './quota.mjs';
 import {swarmModeEnabled} from './bridge.mjs';
 const ownerOK=x=>typeof x==='string'&&/^\d{15,22}$/.test(x);
 export async function runConfiguredSwarmTick(env,{now=Date.now(),leaseOwner=crypto.randomUUID()}={}){
- if(!swarmModeEnabled(env))return {status:'disabled'};
+ if(!swarmModeEnabled(env,now))return {status:'disabled'};
  if(!env?.LOOP_DB?.prepare||!env?.AI?.run||!ownerOK(String(env?.DISCORD_ALLOWED_USER_ID??'')))
    return {status:'blocked',reason:'DEDICATED_BINDINGS_MISSING'};
  let cap;
