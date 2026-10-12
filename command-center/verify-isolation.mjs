@@ -28,4 +28,14 @@ assert.equal((conf.match(/^name\s*=/gm)||[]).length,1,'Exactly one Discord-only 
 const wf=readFileSync(new URL('../.github/workflows/command-center-build.yml',import.meta.url),'utf8');
 assert.ok(wf.includes('--dry-run') && wf.includes('--config wrangler.command-center.toml'),'Build must be compile-only');
 assert.ok(!wf.includes('versions deploy')&&!wf.includes('triggers deploy'),'Build must not change production');
+const release=readFileSync(new URL('../.github/workflows/command-center-guarded-release.yml',import.meta.url),'utf8');
+assert.ok(release.includes('  workflow_dispatch:')&&!release.includes('  push:')&&!release.includes('  schedule:'),
+  'Production release must be manual only');
+assert.ok(release.includes('WORKER_NAME: steep-glitter-b5cddiscord-ai-relay-lab')&&
+  release.includes('database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"'),
+  'Production release must be pinned to exact Discord resources');
+assert.ok(release.includes('OLD_VERSION=')&&release.includes('Restore known GPT-OSS version'),
+  'Capture current production version and preserve rollback');
+assert.ok(!release.includes('triggers deploy')&&!release.includes('d1 execute'),
+  'Dashboard release must not change Cron triggers or run D1 writes');
 console.log('ISOLATION_GUARD_PASS: Discord-only Worker/D1. No YouTube/PLM targets. Offline build only.');
