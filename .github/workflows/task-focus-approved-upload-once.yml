@@ -1,0 +1,63 @@
+name: Approved Task Focus V2 Inactive Upload
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/task-focus-v2-approved-upload.once'
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-version-upload
+  cancel-in-progress: false
+jobs:
+  upload:
+    if: ${{ github.event.head_commit.message == 'Approve single inactive quality-v2 upload' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Confirm user approval and exact target
+        run: |
+          set -euo pipefail
+          test "$(cat preflight/task-focus-v2-approved-upload.once)" = 'APPROVED-ONCE-QUALITY-V2-INACTIVE'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.loop.toml
+          grep -Fxq 'main = "worker-loop.mjs"' wrangler.loop.toml
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.loop.toml
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.loop.toml
+          grep -Fxq 'keep_vars = true' wrangler.loop.toml
+          grep -Fxq 'binding = "AI"' wrangler.loop.toml
+          grep -Fxq 'crons = ["*/1 * * * *"]' wrangler.loop.toml
+          grep -Fq 'Discord GPT Relay loop-v2 task-focus ready.' worker-loop.mjs
+          grep -Fq 'evaluateLoopFinalOutput' worker-loop.mjs
+          grep -Fq 'generateLoopStageWithWorkersAI' worker-loop.mjs
+      - name: Confirm last user-tested production version is still active
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 deployments list --name steep-glitter-b5cddiscord-ai-relay-lab > /tmp/loop-v2-before.txt
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/loop-v2-before.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
+          const v=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
+          if(v.at(-1)!=='aecc9c29-dbef-4abb-8036-3fd3bfbacc23')throw Error('Production version changed. Stop without upload.');
+          console.log('Verified 4-of-4 live loop baseline unchanged.');
+          NODE
+      - name: Test full suite
+        run: |
+          node --test relay.test.mjs worker-relay.test.mjs loop-core.test.mjs loop-worker.test.mjs loop-state.test.mjs loop-d1.test.mjs worker-loop.test.mjs loop-quality.test.mjs
+      - name: Dry run compile
+        run: |
+          npx --yes wrangler@4 deploy --dry-run --config wrangler.loop.toml --outdir /tmp/discord-quality-v2
+      - name: Upload only an inactive version
+        run: |
+          npx --yes wrangler@4 versions upload --config wrangler.loop.toml --message "Task quality v2 approved inactive upload"
+      - name: Finish before live promotion
+        run: |
+          echo 'Inactive version uploaded. Production and Cron unchanged. Save exact Worker Version ID from output.'
