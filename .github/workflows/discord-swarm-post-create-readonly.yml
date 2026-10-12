@@ -69,3 +69,35 @@ jobs:
           console.log('DISCORD_SWARM_POST_CREATE_PASS objects=4 columns=verified unique_active_index=verified swarm_jobs_rows=0 swarm_budget_rows=0 legacy_active_jobs=0');
           console.log('READ_ONLY_NO_D1_WRITES_NO_WORKER_DEPLOY_NO_SECRETS_NO_INFERENCE');
           NODE
+
+      - name: Verify all four SWARM permission flags are OFF in live Worker settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-post-create-readonly-20261012'
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'BLOCKED_WORKER_READ_TOKEN_MISSING'; exit 1; }
+          node --input-type=module <<'NODE'
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const worker='steep-glitter-b5cddiscord-ai-relay-lab';
+          const endpoint='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/'+worker+'/settings';
+          const response=await fetch(endpoint,{
+            headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN},
+            signal:AbortSignal.timeout(18000)
+          });
+          if(!response.ok)throw Error('BLOCKED_WORKER_SETTINGS_HTTP_'+response.status);
+          const data=await response.json();
+          if(data?.success!==true||!Array.isArray(data?.result?.bindings))
+            throw Error('BLOCKED_WORKER_SETTINGS_BINDINGS_UNVERIFIED');
+          const required=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          const bindings=data.result.bindings;
+          for(const key of required){
+            const matching=bindings.filter(x=>x.name===key);
+            if(matching.length>1)throw Error('BLOCKED_DUPLICATE_'+key);
+            if(matching.length===1&&(matching[0].type!=='plain_text'||matching[0].text!=='false'))
+              throw Error('BLOCKED_NOT_OFF_'+key);
+          }
+          console.log('SWARM_EXECUTION_FLAGS_OFF_VERIFIED: 4 of 4 permission flags absent or explicitly false; no secrets or values printed');
+          console.log('READ_ONLY_SETTINGS_CHECK_NO_WORKER_CHANGE');
+          NODE
