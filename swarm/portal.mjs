@@ -109,7 +109,9 @@ async function refresh(){
  }catch(e){text('authStatus','● 読込エラー');text('feedback','読み込み失敗: '+e.message);runner=false;setButtons()}
 }
 async function act(action,body){
- if(!runner||!csrf)return;
+ // Emergency STOP must remain actionable while the AI runner is disabled.
+ // Creating/resuming work stays gated by all four execution flags.
+ if(!csrf||(action!=='stop'&&!runner))return;
  try{
  const response=await fetch('/command-center/api/swarm/'+action,{
    method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
