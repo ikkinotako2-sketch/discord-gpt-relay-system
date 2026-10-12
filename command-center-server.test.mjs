@@ -146,6 +146,7 @@ test('owner can read D1 and issue CSRF-protected start and stop',async()=>{
   const state=await before.json();
   assert.equal(state.jobs.length,0);
   assert.equal(state.modelName,'Llama 3.1 8B');
+  assert.deepEqual(state.jobs.map(j=>j.history),[]);
   const postOptions=(body,headers={})=>({
     method:'POST',body:JSON.stringify(body),
     headers:{Origin:COMMAND_CENTER_ORIGIN,'Content-Type':'application/json',
@@ -194,4 +195,26 @@ test('dashboard identifies current GPT-OSS model without asserting model on old 
   const data=await r.json();
   assert.equal(data.modelName,'GPT-OSS 20B');
   assert.equal(data.modelScope,'current_settings_only');
+});
+
+test('owner-only overview includes handoff history without leaking it to unauthenticated callers',async()=>{
+  const {env,sqlite}=setup();
+  const current=Date.now();
+  sqlite.prepare(`INSERT INTO relay_loop_jobs
+    (run_id,requester_discord_id,task,status,next_role,round_number,max_rounds,
+     calls_used,revision,history_json,stop_requested,active_slot,created_at,updated_at,expires_at,previous_artifact)
+     VALUES (? ,?,?,'completed',NULL,2,2,4,0,?,0,NULL,?,?,?,?)`)
+    .run('dash-history-test',OWNER,'元の依頼のテスト',
+      JSON.stringify([{round:1,role:'planner',output:'Aが作成した計画'},
+        {round:1,role:'builder',output:'Bが受け取った計画の結果'}]),
+      current,current,current+60000,'完成文');
+  const denied=await handleDashboardRequest(req('/command-center/api/overview'),env);
+  assert.equal(denied.status,401);
+  const session=await createDashboardSession(OWNER,env);
+  const allowed=await handleDashboardRequest(sessionRequest('/command-center/api/overview',env,session),env);
+  assert.equal(allowed.status,200);
+  const obj=await allowed.json();
+  assert.equal(obj.jobs.length,1);
+  assert.deepEqual(obj.jobs[0].history.map(s=>s.text),['Aが作成した計画','Bが受け取った計画の結果']);
+  assert.equal(obj.jobs[0].finalResult,'完成文');
 });
