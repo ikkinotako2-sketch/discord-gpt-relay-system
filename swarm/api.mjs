@@ -2,6 +2,7 @@
 // NOT imported by the live Discord Worker. Requires a separate production approval.
 import {authenticateDashboard,COMMAND_CENTER_ORIGIN,dashboardConfigured} from '../command-center/server.mjs';
 import {createTask,ownerSnapshot,requestStop,resumeAfterQuota} from './engine.mjs';
+import {buildSwarmHandoff} from './handoff.mjs';
 
 const BASE='/command-center/api/swarm/';
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',
@@ -30,6 +31,10 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
   const session=await authenticateDashboard(request,env);
   if(!session)return json({error:'AUTH_REQUIRED'},401);
   if(!env.LOOP_DB?.prepare)return json({error:'DB_UNAVAILABLE'},503);
+  if(url.pathname===BASE+'handoff'&&request.method==='GET'){
+    try{return json(buildSwarmHandoff(await ownerSnapshot(env.LOOP_DB,session.id)));}
+    catch{return json({error:'HANDOFF_UNAVAILABLE'},503);}
+  }
   if(url.pathname===BASE+'overview'&&request.method==='GET'){
     try {
       const snapshot=await ownerSnapshot(env.LOOP_DB,session.id);

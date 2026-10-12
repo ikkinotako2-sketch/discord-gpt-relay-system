@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: '22'
       - name: Run six-agent SQLite state machine tests (NO CLOUDFLARE)
-        run: node --test swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs
+        run: node --test swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs
       - name: Validate staged Workers AI adapter and neon HTML source
         run: |
           node --check swarm/engine.mjs
@@ -25,5 +25,6 @@ jobs:
           node --check swarm/portal.mjs
           node --check swarm/quota.mjs
           node --check swarm/cron.mjs
+          node --check swarm/handoff.mjs
           test -s swarm/command-center-preview.html
           echo 'OFFLINE_ONLY_PASS — no secrets, deploy, D1 migration or inference'

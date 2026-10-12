@@ -42,6 +42,7 @@ test('owner portal is nonce-free hashed CSP with script and styles',async()=>{
  const html=await response.text();
  assert.match(html,/6-ROLE AI ORCHESTRATION/);
  assert.match(html,/owner/i);
+ assert.match(html,/引き継ぎJSON保存/);
 });
 test('portal only accepts exact same-origin routes, no arbitrary prefix',async()=>{
  const {env}=fixture();

@@ -9,3 +9,7 @@ If no allowance BEFORE claim: quota_wait and later resume when capacity recovers
 A Command Center may display all six roles, but it must separate live data from a simulation, and must not describe model roles as independent consumer ChatGPT sessions.
 
 Existing Project Love Machine/YouTube repositories, Cloudflare Workers, D1 IDs, Secrets and Actions must remain untouched.
+
+## Export into a new authorized conversation
+
+An authenticated owner can GET `/command-center/api/swarm/handoff` (after staged wiring and production approval) and copy the generated Markdown into a new conversation, or save a structured JSON file. This exports saved work status, last checkpoint, confirmed stage history and the next role, **not** private ChatGPT conversation history. Unknown outcomes explicitly require manual inspection rather than auto-retry. The record lasts only as long as the dedicated D1 retention policy allows.

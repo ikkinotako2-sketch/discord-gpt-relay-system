@@ -52,7 +52,8 @@ pre{white-space:pre-wrap;word-break:break-word;font:12px/1.65 monospace;backgrou
 <label for="task">仕事の目標</label><input id="task" maxlength="1000" value="Bluesky自動化の設計・テスト計画を作成する">
 <label for="cycles">改善サイクル上限</label><select id="cycles"><option value="1">1周（最大6回）</option><option value="2">2周（最大12回）</option><option value="3">3周（最大18回）</option></select>
 <div class="actions"><button id="create" disabled>新しいタスク</button><button id="stop" class="danger" disabled>緊急STOP</button>
-<button id="resume" class="secondary" disabled>利用枠回復後に再開</button><button id="refresh" class="secondary">更新</button></div>
+<button id="resume" class="secondary" disabled>利用枠回復後に再開</button><button id="refresh" class="secondary">更新</button>
+<button id="handoff" class="secondary">引き継ぎ内容をコピー</button><button id="download" class="secondary">引き継ぎJSON保存</button></div>
 <p class="notice" id="feedback">Discordの本人認証と独立したAI実行許可が必要です。</p>
 </section></div>
 <div class="cols"><section class="panel"><h2>⌁ HANDOFF / CHECKPOINT</h2><pre id="checkpoint">最新の作業はまだありません。</pre></section>
@@ -121,6 +122,26 @@ $('create').onclick=()=>act('create',{task:$('task').value,cycles:Number($('cycl
 $('stop').onclick=()=>act('stop',{});
 $('resume').onclick=()=>{if(job)act('resume',{runId:job.id})};
 $('refresh').onclick=refresh;
+async function handoff(download){
+ try{
+  const res=await fetch('/command-center/api/swarm/handoff',{credentials:'same-origin',cache:'no-store'});
+  if(!res.ok)throw Error('HTTP '+res.status);
+  const packet=await res.json();
+  if(packet.schema!=='discord-swarm.handoff.v1')throw Error('Invalid handoff packet');
+  if(download){
+   const blob=new Blob([JSON.stringify(packet,null,2)],{type:'application/json'});
+   const url=URL.createObjectURL(blob),a=document.createElement('a');
+   a.href=url;a.download='swarm-handoff.json';a.click();
+   setTimeout(()=>URL.revokeObjectURL(url),1000);
+   text('feedback','引き継ぎJSONを保存しました。');
+  }else{
+   try{await navigator.clipboard.writeText(packet.markdown);text('feedback','引き継ぎ内容をコピーしました。')}
+   catch{text('checkpoint',packet.markdown);text('feedback','コピーできないため、引き継ぎ文を画面に表示しました。')}
+  }
+ }catch(e){text('feedback','引き継ぎの出力に失敗: '+e.message)}
+}
+$('handoff').onclick=()=>handoff(false);
+$('download').onclick=()=>handoff(true);
 renderAgents();refresh();
 setInterval(()=>{if(!document.hidden)refresh()},15000);
 })();

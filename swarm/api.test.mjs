@@ -89,3 +89,17 @@ test('read-only dashboard remains accessible but mutations fail closed if runner
   assert.equal(info.csrfToken,auth.csrf);
   assert.equal((await handleSwarmApi(write('create',auth,{task:'draft',cycles:1}),env)).status,503);
 });
+
+test('handoff export requires owner session and exposes only confirmed job state',async()=>{
+  const {db}=fixture(),auth=await sessionFixture(db);
+  assert.equal((await handleSwarmApi(req('handoff'),auth.env)).status,401);
+  const created=await handleSwarmApi(write('create',auth,{task:'handoff test',cycles:1}),auth.env,{runIdFactory:()=> 'handoff_job'});
+  assert.equal(created.status,201);
+  const response=await handleSwarmApi(req('handoff',{headers:auth.headers}),auth.env);
+  assert.equal(response.status,200);
+  const out=await response.json();
+  assert.equal(out.schema,'discord-swarm.handoff.v1');
+  assert.equal(out.runId,'handoff_job');
+  assert.equal(out.stepsConfirmed,0);
+  assert.match(out.markdown,/handoff test/);
+});
