@@ -1,5 +1,8 @@
 name: Six-Agent Exclusive Integration Offline (NO DEPLOY)
 on:
+  push:
+    branches: ['feature/swarm-six-role-safe-wiring-20261012']
+    paths: ['.github/workflows/swarm-exclusive-integration-tests.yml']
   pull_request:
     paths:
       - 'worker-loop.mjs'
