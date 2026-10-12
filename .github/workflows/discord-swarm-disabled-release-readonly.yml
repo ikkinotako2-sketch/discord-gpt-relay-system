@@ -115,3 +115,4 @@ jobs:
         run: echo 'READ_ONLY_RELEASE_PREFLIGHT_COMPLETE_NO_DEPLOY_NO_MODEL_INFERENCE_NO_D1_WRITE_NO_SECRET_CHANGE'
 # 2026-10-12 owner-approved six-agent 1-cycle smoke preflight recheck; READ ONLY; no execution or flags.
 # PR8 final owner-approved one-time release preflight, read-only, 2026-10-13 Japan; expected code HEAD 2e5a39c27ed3c229ee76a013c941f2dcd46d2725.
+# PR8 owner-only post-deploy verification 2026-10-13 JST; expected published main b013829022a69d0af770d2d1a3e0ae23422539b3. READ ONLY.
