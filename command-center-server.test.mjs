@@ -145,6 +145,7 @@ test('owner can read D1 and issue CSRF-protected start and stop',async()=>{
   assert.equal(before.status,200);
   const state=await before.json();
   assert.equal(state.jobs.length,0);
+  assert.equal(state.modelName,'Llama 3.1 8B');
   const postOptions=(body,headers={})=>({
     method:'POST',body:JSON.stringify(body),
     headers:{Origin:COMMAND_CENTER_ORIGIN,'Content-Type':'application/json',
@@ -182,4 +183,15 @@ test('dashboard rejects unexpected origin and never becomes public status endpoi
   const {env}=setup();
   const r=await handleDashboardRequest(new Request('https://evil.invalid/command-center/api/overview'),env);
   assert.equal(r.status,404);
+});
+
+test('dashboard identifies current GPT-OSS model without asserting model on old historical jobs',async()=>{
+  const {env}=setup();
+  env.LOOP_AI_MODEL='@cf/openai/gpt-oss-20b';
+  const session=await createDashboardSession(OWNER,env);
+  const r=await handleDashboardRequest(sessionRequest('/command-center/api/overview',env,session),env);
+  assert.equal(r.status,200);
+  const data=await r.json();
+  assert.equal(data.modelName,'GPT-OSS 20B');
+  assert.equal(data.modelScope,'current_settings_only');
 });
