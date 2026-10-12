@@ -150,3 +150,16 @@ test('handoff export requires owner session and exposes only confirmed job state
   assert.equal(out.stepsConfirmed,0);
   assert.match(out.markdown,/handoff test/);
 });
+
+test('expired six-call approval blocks new jobs but preserves owner CSRF STOP',async()=>{
+ const {db}=fixture(),auth=await sessionFixture(db);
+ const created=await handleSwarmApi(write('create',auth,{task:'start within window',cycles:1}),auth.env,{runIdFactory:()=> 'expires_before_stop'});
+ assert.equal(created.status,201);
+ const expired={...auth.env,SWARM_SMOKE_EXPIRES_AT:String(Date.now()-1000)};
+ const newJob=await handleSwarmApi(write('create',auth,{task:'must not start',cycles:1}),expired);
+ assert.equal(newJob.status,503);
+ assert.equal((await newJob.json()).error,'RUNNER_NOT_ENABLED');
+ const stop=await handleSwarmApi(write('stop',auth),expired);
+ assert.equal(stop.status,200);
+ assert.equal((await stop.json()).status,'stopped');
+});
