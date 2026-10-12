@@ -68,7 +68,9 @@ jobs:
             fetch(u,{signal:AbortSignal.timeout(12000)}),
             fetch(u,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)})
           ]);
-          if(get.status!==200 || (await get.text()).trim()!=='Discord GPT Relay gpt-oss pilot ready.' || post.status!==401)
+          const marker=(await get.text()).trim();
+          const allowed=new Set(['Discord GPT Relay gpt-oss pilot ready.','Discord GPT Relay gpt-oss command-center ready.']);
+          if(get.status!==200 || !allowed.has(marker) || post.status!==401)
             throw Error('Existing GPT-OSS worker failed signature/health check. Stop.');
           console.log('Original GPT-OSS loop is healthy; no job was submitted.');
           NODE
@@ -230,7 +232,7 @@ jobs:
           for(let n=1;n<=8;n++){
             try{
               const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
-              if(r.status===200&&(await r.text()).trim()==='Discord GPT Relay gpt-oss pilot ready.')process.exit(0);
+              if(r.status===200&&new Set(['Discord GPT Relay gpt-oss pilot ready.','Discord GPT Relay gpt-oss command-center ready.']).has((await r.text()).trim()))process.exit(0);
             }catch{}
             if(n<8)await new Promise(r=>setTimeout(r,5000));
           }
