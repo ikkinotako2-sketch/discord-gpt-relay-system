@@ -1,0 +1,71 @@
+name: Discord Swarm Post-Create Read-Only Verify (NO WRITES)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-post-create-readonly-20261012]
+    paths: ['.github/workflows/discord-swarm-post-create-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  inspect-only:
+    if: ${{ github.event.head_commit.message == 'Verify newly created isolated Discord swarm schema once read only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: '6c8ccd6aface937ab5dabef61cb64534'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enforce exact isolated Discord-only D1 target and immutable schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-post-create-readonly-20261012'
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'BLOCKED_MISSING_D1_READ_TOKEN'; exit 1; }
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.command-center.toml
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.command-center.toml
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.command-center.toml
+          test "$(git hash-object swarm/schema.sql)" = '8aa4dd566b1af37b609fe715d4c59b4517ddeced'
+      - name: Read schema names and D1 row counts without any writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmd() { npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "$1"; }
+          cmd "SELECT name,type,sql FROM sqlite_master WHERE name IN ('swarm_jobs','swarm_budget_days','swarm_single_active_job','swarm_owner_created') ORDER BY name;" > /tmp/swarm-objects.json
+          cmd "SELECT (SELECT COUNT(*) FROM swarm_jobs) AS swarm_jobs_rows, (SELECT COUNT(*) FROM swarm_budget_days) AS swarm_budget_rows, (SELECT COUNT(*) FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot=1) AS legacy_active_jobs;" > /tmp/swarm-counts.json
+          cmd "SELECT name FROM pragma_table_info('swarm_jobs') ORDER BY cid;" > /tmp/swarm-job-cols.json
+          cmd "SELECT name FROM pragma_table_info('swarm_budget_days') ORDER BY cid;" > /tmp/swarm-budget-cols.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          function rows(file){
+            const d=JSON.parse(fs.readFileSync(file,'utf8'));
+            if(!Array.isArray(d)||d.length!==1||d[0]?.success!==true||!Array.isArray(d[0]?.results))
+              throw Error('BLOCKED_BAD_READONLY_QUERY_RESPONSE');
+            return d[0].results;
+          }
+          const objects=rows('/tmp/swarm-objects.json');
+          const expected=new Map([['swarm_budget_days','table'],['swarm_jobs','table'],['swarm_owner_created','index'],['swarm_single_active_job','index']]);
+          if(objects.length!==4||objects.some(x=>!expected.has(x.name)||expected.get(x.name)!==x.type||typeof x.sql!=='string'))
+            throw Error('BLOCKED_DB_OBJECTS_MISSING_OR_UNEXPECTED');
+          const idx=objects.find(x=>x.name==='swarm_single_active_job');
+          if(!/CREATE\s+UNIQUE\s+INDEX/i.test(idx.sql)||!/active_slot/i.test(idx.sql)||!/WHERE\s+active_slot\s*=\s*1/i.test(idx.sql))
+            throw Error('BLOCKED_PARALLEL_JOB_GUARD_UNVERIFIED');
+          const sort=objects.find(x=>x.name==='swarm_owner_created');
+          if(!/owner_id\s*,\s*created_at\s+DESC/i.test(sort.sql))throw Error('BLOCKED_HISTORY_INDEX_UNVERIFIED');
+          const cols=(file)=>rows(file).map(x=>x.name);
+          const requiredJobs=['run_id','owner_id','task','cycles','status','calls_used','revision','history_json','checkpoint','stop_requested','active_slot','lease_owner','lease_expires_at','last_error','created_at','updated_at','expires_at'];
+          const requiredBudget=['owner_id','utc_day','cap','reserved','updated_at'];
+          if(JSON.stringify(cols('/tmp/swarm-job-cols.json'))!==JSON.stringify(requiredJobs))
+            throw Error('BLOCKED_SWARM_JOBS_COLUMNS_MISMATCH');
+          if(JSON.stringify(cols('/tmp/swarm-budget-cols.json'))!==JSON.stringify(requiredBudget))
+            throw Error('BLOCKED_SWARM_BUDGET_COLUMNS_MISMATCH');
+          const counts=rows('/tmp/swarm-counts.json');
+          if(counts.length!==1||!['swarm_jobs_rows','swarm_budget_rows','legacy_active_jobs'].every(k=>Number.isSafeInteger(counts[0][k])&&counts[0][k]===0))
+            throw Error('BLOCKED_NONZERO_OR_UNVERIFIED_JOB_COUNTS');
+          console.log('DISCORD_SWARM_POST_CREATE_PASS objects=4 columns=verified unique_active_index=verified swarm_jobs_rows=0 swarm_budget_rows=0 legacy_active_jobs=0');
+          console.log('READ_ONLY_NO_D1_WRITES_NO_WORKER_DEPLOY_NO_SECRETS_NO_INFERENCE');
+          NODE
