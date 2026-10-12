@@ -16,3 +16,13 @@ CREATE TABLE IF NOT EXISTS swarm_jobs (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS swarm_single_active_job ON swarm_jobs(active_slot) WHERE active_slot=1;
 CREATE INDEX IF NOT EXISTS swarm_owner_created ON swarm_jobs(owner_id,created_at DESC);
+
+-- Conservative, D1-atomic local reservation ledger; not provider billing data.
+CREATE TABLE IF NOT EXISTS swarm_budget_days (
+  owner_id TEXT NOT NULL,
+  utc_day TEXT NOT NULL,
+  cap INTEGER NOT NULL CHECK(cap BETWEEN 1 AND 18),
+  reserved INTEGER NOT NULL DEFAULT 0 CHECK(reserved>=0),
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(owner_id,utc_day)
+);

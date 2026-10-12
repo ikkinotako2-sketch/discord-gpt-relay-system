@@ -23,3 +23,7 @@ This branch extends the existing Discord GPT Relay Lab. Nothing modifies the exi
 Test offline: node --test swarm/engine.test.mjs (Node 22+).
 
 Branch contains only swarm/** additions. Do not merge or deploy automatically.
+
+## Conservative daily call reservations (staged)
+
+The optional Cron adapter in `swarm/cron.mjs` requires three independent opt-in flags (`SWARM_API_ENABLED`, `SWARM_RUNNER_ENABLED`, `SWARM_EXECUTION_APPROVED`) and an explicit `SWARM_DAILY_CALL_CAP` of 1..18. It atomically reserves each inference against a local UTC-day budget before claiming work. This is **not** a Cloudflare quota inquiry or a guarantee of zero billing; it is a deliberately conservative local safety guard. No Cron hook is currently wired. Each unconfirmed inference remains terminal `unknown` rather than being retried.
