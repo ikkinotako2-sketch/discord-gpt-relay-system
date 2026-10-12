@@ -16,7 +16,7 @@ jobs:
         with:
           node-version: '22'
       - name: Run six-agent SQLite state machine tests (NO CLOUDFLARE)
-        run: node --test swarm/engine.test.mjs
+        run: node --test swarm/engine.test.mjs swarm/runner.test.mjs
       - name: Validate staged Workers AI adapter and neon HTML source
         run: |
           node --check swarm/engine.mjs
