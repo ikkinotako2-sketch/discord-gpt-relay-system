@@ -1,0 +1,74 @@
+name: Discord Swarm Migration Preflight Read Only (NO WRITES)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-migration-preflight-20261012]
+    paths: ['.github/workflows/discord-swarm-migration-preflight-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: ${{ github.event.head_commit.message == 'Verify Discord-only D1 pre-migration safety once read only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: '6c8ccd6aface937ab5dabef61cb64534'
+      DISCORD_D1_ID: 'd80b08a4-0ff7-4320-9575-0d3c55cf7aba'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify known Discord-only DB and exact approved schema before reading
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-migration-preflight-20261012'
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          test "$DISCORD_D1_ID" = 'd80b08a4-0ff7-4320-9575-0d3c55cf7aba'
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo 'BLOCKED_D1_READ_TOKEN_MISSING'; exit 1; }
+          grep -Fxq 'name = "steep-glitter-b5cddiscord-ai-relay-lab"' wrangler.command-center.toml
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.command-center.toml
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.command-center.toml
+          test "$(git hash-object swarm/schema.sql)" = '8aa4dd566b1af37b609fe715d4c59b4517ddeced'
+          node --test swarm/schema-readiness.test.mjs
+      - name: Check D1 production backend and current Time Travel bookmark (read only)
+        run: |
+          set -euo pipefail
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$DISCORD_D1_ID"
+          curl --silent --show-error --fail --retry 0 --max-time 25 --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$base" > /tmp/discord-d1-info.json
+          curl --silent --show-error --fail --retry 0 --max-time 25 --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$base/time_travel/bookmark" > /tmp/discord-d1-bookmark.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const info=JSON.parse(fs.readFileSync('/tmp/discord-d1-info.json','utf8'));
+          const snapshot=JSON.parse(fs.readFileSync('/tmp/discord-d1-bookmark.json','utf8'));
+          if(info.success!==true||info.result?.uuid!=='d80b08a4-0ff7-4320-9575-0d3c55cf7aba')
+            throw Error('BLOCKED_D1_IDENTITY_UNVERIFIED');
+          if(info.result?.name!=='discord-relay-loop-state')throw Error('BLOCKED_D1_NAME_MISMATCH');
+          if(info.result?.version!=='production')throw Error('BLOCKED_D1_TIME_TRAVEL_BACKEND_UNVERIFIED');
+          if(snapshot.success!==true||typeof snapshot.result?.bookmark!=='string'||snapshot.result.bookmark.length<24)
+            throw Error('BLOCKED_CURRENT_RECOVERY_BOOKMARK_UNAVAILABLE');
+          console.log('DISCORD_D1_RECOVERY_READY: identity=verified, version=production, bookmark=available, timestamp='+new Date().toISOString());
+          // Never output the private access token or bookmark into a public repository log.
+          NODE
+      - name: Confirm zero active legacy jobs and zero conflicting objects (read only)
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot=1;" > /tmp/discord-preflight-active.json
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT name,type FROM sqlite_master WHERE name IN ('swarm_jobs','swarm_budget_days','swarm_single_active_job','swarm_owner_created') ORDER BY name;" > /tmp/discord-preflight-objects.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          function results(file){
+            const d=JSON.parse(fs.readFileSync(file,'utf8'));
+            if(!Array.isArray(d)||d.length!==1||d[0]?.success!==true||!Array.isArray(d[0].results))
+              throw Error('BLOCKED_D1_QUERY_RESPONSE_INVALID');
+            return d[0].results;
+          }
+          const active=results('/tmp/discord-preflight-active.json');
+          if(active.length!==1||!Number.isSafeInteger(active[0].active_jobs)||active[0].active_jobs!==0)
+            throw Error('BLOCKED_DISCORD_LEGACY_ACTIVE_OR_UNVERIFIED');
+          const objects=results('/tmp/discord-preflight-objects.json');
+          if(objects.length!==0)throw Error('BLOCKED_SWARM_SCHEMA_EXISTS_OR_CONFLICTS');
+          console.log('DISCORD_SWARM_SCHEMA_PREPARED: active_jobs=0; objects=0; migration_not_executed');
+          console.log('READ_ONLY_PREFLIGHT_PASS_NO_D1_WRITE_NO_WORKER_DEPLOY_NO_SECRETS_NO_AI');
+          NODE
