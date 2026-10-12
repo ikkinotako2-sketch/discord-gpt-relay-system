@@ -9,6 +9,7 @@ const BASE=COMMAND_CENTER_ORIGIN+'/command-center/api/swarm/';
 function fixture(){
   const sql=new DatabaseSync(':memory:');
   sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../db/migrations/0001_discord_loop_jobs.sql',import.meta.url),'utf8'));
   const db={prepare(s){
     const statement=sql.prepare(s);
     return {bind(...args){return {
@@ -21,7 +22,8 @@ function fixture(){
 }
 async function sessionFixture(db){
   const env={LOOP_DB:db,DISCORD_ALLOWED_USER_ID:OWNER,DASHBOARD_ENABLED:'true',
-    SWARM_API_ENABLED:'true',SWARM_RUNNER_ENABLED:'true',SWARM_EXECUTION_APPROVED:'true',DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
+    SWARM_API_ENABLED:'true',SWARM_RUNNER_ENABLED:'true',SWARM_EXECUTION_APPROVED:'true',
+    SWARM_EXCLUSIVE_MODE:'true',SWARM_DAILY_CALL_CAP:'6',DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
     DASHBOARD_COOKIE_KEY:'fake_testing_only_cookie_key_not_for_real_auth_1234'};
   const signed=await createDashboardSession(OWNER,env);
   const headers={Cookie:'dc_session='+signed};
