@@ -1,5 +1,18 @@
 # Discord AI Relay Lab — verified status (2026-10-12)
 
+## Command Center website — CODE COMPLETE / TESTS PASS / NOT DEPLOYED
+
+- User requested an eventual **web dashboard to see which AI roles or chat connectors exchange work**, with monitoring, task submission and STOP controls. The user wants to inspect and operate the loop from the same ChatGPT project, but the existing loop does not connect consumer ChatGPT conversations directly.
+- Prototype frontend `command-center/index.html`: Japanese, responsive, four-stage diagram **AI A(planner) → AI B(builder) → AI A(reviser) → AI B(final)**; current run, status, last answer, owner-visible history, planned start/STOP controls. Unconnected preview is clearly labeled DEMO, controls disabled.
+- Backend `command-center/server.mjs`: staged Discord OAuth2 `identify` flow with strict owner ID, signed HttpOnly Secure cookie, OAuth state, same-origin CSRF checks, safe non-public D1 read / start / stop endpoints. `command-center/data.mjs` scopes all queries to the authenticated owner. Dashboard auth code is imported behind an opt-in route in GitHub `worker-loop.mjs`, but **NOT** in currently deployed Worker version.
+- Candidate `wrangler.command-center.toml` with exact Discord-only Worker/D1 and existing GPT-OSS AI + Cron, `DASHBOARD_ENABLED=true`, plus two **new required Cloudflare secrets**: `DISCORD_OAUTH_CLIENT_SECRET`, `DASHBOARD_COOKIE_KEY`. The correct OAuth redirect must first be registered with the existing Discord application.
+- Browser UI refreshes every 15 seconds while visible and authenticated. The current model indicator is labeled `current_settings_only` and does NOT falsely attribute prior jobs to today's model.
+- GitHub Actions [38194486765](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38194486765): **92/92 complete regression tests PASS**. [38194486672](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38194486672): **59/59 focused tests PASS + Wrangler offline dry-run build PASS**. No production deploy, no database schema change, no AI inference.
+- How to configure the private future site: `docs/COMMAND_CENTER.md`. Never paste any Discord OAuth Client Secret or Dashboard Cookie Key into chat or public GitHub. Do not release until current GPT-OSS real inference job has reached a terminal state, secrets/redirect are configured, and a separate production approval is given.
+- **Current supported topology is one AI pair of roles, NOT two independent consumer ChatGPT conversations**. Multi-chat/provider graph routing, cost metering, longer-term history and public URL are future stages, not live functionality.
+
+---
+
 ## GPT-OSS pilot LIVE — 2026-10-12, real inference still unverified
 
 - User confirmed Cloudflare **Free** and supplied Discord `/loop-status` screenshot for latest run `d1559005008987430922`: `完了`, `4/4` AI calls, short greeting output. This supports the latest run being terminal. It does **not** independently prove all D1 rows are inactive; the prior remote D1 aggregate read [38191806194](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38191806194) failed before producing a count. No paid billing or quota upgrade occurred.
