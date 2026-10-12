@@ -5,6 +5,7 @@ import {DASHBOARD_HTML} from './page.mjs';
 import {getOwnerDashboardSnapshot} from './data.mjs';
 import {createDurableLoop,requestDurableStop} from '../loop-d1.mjs';
 import {resolveLoopModel,GPT_OSS_MODEL} from '../loop-quality.mjs';
+import {swarmModeEnabled} from '../swarm/bridge.mjs';
 
 export const COMMAND_CENTER_ORIGIN='https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev';
 const BASE='/command-center';
@@ -169,6 +170,7 @@ export async function handleDashboardRequest(request,env){
   }
   if(url.pathname===BASE+'/api/start'&&request.method==='POST'){
     if(!validMutatingRequest(request,session))return json({error:'CSRF_REJECTED'},403);
+    if(swarmModeEnabled(env))return json({error:'SIX_ROLE_EXCLUSIVE_MODE'},409);
     const raw=await request.text();
     if(raw.length>2200)return json({error:'TASK_TOO_LONG'},400);
     let input;try{input=JSON.parse(raw)}catch{return json({error:'INVALID_JSON'},400)}
