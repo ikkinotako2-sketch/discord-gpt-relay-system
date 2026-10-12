@@ -1,5 +1,19 @@
 # Discord AI Relay Lab — verified status (2026-10-12)
 
+## GPT-OSS pilot — INACTIVE CANDIDATE READY, LIVE LLAMA PRESERVED
+
+- Current production: user-tested **Llama** quality-v2 version `91dd0014-179c-44b8-88ac-7084776f5e7b`. The actual `/loop` continues to use Llama. No official GPT API subscription or consumer ChatGPT chat is connected.
+- Model feature: strict opt-in via `LOOP_AI_MODEL = "@cf/openai/gpt-oss-20b"`, selected **only** by the staged `wrangler.gpt-oss.toml`. Missing value still defaults to Llama. Unexpected values fail before an AI call or D1 step claim.
+- Integration tests: **72/72 PASS** and Wrangler dry-run PASS at [38189809571](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38189809571).
+- Cloudflare inactive GPT-OSS version **`64b48d3f-a427-4229-af27-c8c3710fa309`** successfully uploaded; GET preview health and unsigned signature rejection **PASS** at [38189921268](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38189921268).
+- Post-upload check reconfirmed original Llama production live at 100%; no change to current Discord commands, D1 schema or Cron.
+- **No actual GPT-OSS inference was run**. It remains unknown whether the model will produce a usable Japanese response within budget/time limits.
+- A future release workflow is **staged but not run**, `.github/workflows/gpt-oss-pilot-release.yml`, pinned to exact candidate and user-tested Llama rollback version.
+- **BLOCKERS before production:** account owner's confirmation of **Cloudflare Free** (no unapproved billing), no queued/claimed Discord jobs, express approval of limited GPT-OSS inference on the free allocation. Changing billing plan, purchasing credits and mass model testing are out of scope.
+- Full plan: `docs/GPT_OSS_PILOT.md`.
+
+---
+
 ## CURRENT: QUALITY_V2_PRODUCTION_LIVE / FIRST_LIVE_QUALITY_TEST_PASS / STOP_TEST_PENDING
 
 ### Live quality-v2 test PASS — user screenshot 2026-10-12
