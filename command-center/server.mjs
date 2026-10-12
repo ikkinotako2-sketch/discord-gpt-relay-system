@@ -161,7 +161,7 @@ export async function handleDashboardRequest(request,env){
   if((url.pathname===BASE||url.pathname===BASE+'/')&&request.method==='GET')
     return dashboardHtml();
   if(url.pathname===BASE+'/api/overview'&&request.method==='GET'){
-    const snapshot=await getOwnerDashboardSnapshot(env.LOOP_DB,session.id);
+    const snapshot=await getOwnerDashboardSnapshot(env.LOOP_DB,session.id,{includeHistory:true});
     const model=resolveLoopModel(env);
     // This labels CURRENT configured model only; older D1 jobs have no model ID.
     return json({...snapshot,modelName:model===GPT_OSS_MODEL?'GPT-OSS 20B':'Llama 3.1 8B',
