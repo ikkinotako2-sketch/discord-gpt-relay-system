@@ -54,3 +54,16 @@ test('runner blocks tasks owned by any other Discord user',async()=>{
  assert.equal(response.reason,'BUDGET_DENIED');
  assert.equal(calls(),0);
 });
+
+test('six-call smoke window halts Cron after expiry regardless of unused daily quota',async()=>{
+ const {env,db,calls}=fixture();
+ const smoke={...env,SWARM_DAILY_CALL_CAP:'6',
+   SWARM_SMOKE_EXPIRES_AT:String(DAY+2*60*1000)};
+ await createTask(db,{runId:'smoke_job',ownerId:OWNER,task:'safe test task',now:DAY});
+ const one=await runConfiguredSwarmTick(smoke,{now:DAY+1000,leaseOwner:'smoke1'});
+ assert.equal(one.status,'queued');
+ assert.equal(calls(),1);
+ const overdue=await runConfiguredSwarmTick(smoke,{now:DAY+2*60*1000,leaseOwner:'smoke2'});
+ assert.equal(overdue.status,'disabled');
+ assert.equal(calls(),1,'expired smoke cap may not consume any more tokens');
+});
