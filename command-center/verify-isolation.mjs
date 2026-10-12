@@ -41,6 +41,15 @@ assert.ok(release.includes('WORKER_NAME: steep-glitter-b5cddiscord-ai-relay-lab'
   'Production release must be pinned to exact Discord resources');
 assert.ok(release.includes('OLD_VERSION=')&&release.includes('Restore known GPT-OSS version'),
   'Capture current production version and preserve rollback');
-assert.ok(!release.includes('triggers deploy')&&!release.includes('d1 execute'),
-  'Dashboard release must not change Cron triggers or run D1 writes');
+// Exactly two read-only remote COUNT(*) checks are allowed. No D1 mutation or migrations.
+const safeRead = 'd1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN (\'queued\',\'claimed\') OR active_slot = 1;"';
+const count=(release.match(/d1 execute /g)||[]).length;
+assert.equal(count,2,'Exactly two D1 read-only checks are required');
+assert.equal(release.split(safeRead).length-1,2,'Only exact Discord-only active-job SELECT checks may run');
+assert.equal(release.split('node command-center/release-d1-guard.mjs /tmp/d1-before-').length-1,2,
+  'Every D1 query must have strict fail-closed response validation');
+assert.ok(!release.includes('triggers deploy')&&!release.includes('d1 migrations'),
+  'No D1 migration or Cron deployment');
+assert.ok(!/d1 execute .*--file|d1 (?:delete|import|create|migrations)/i.test(release),
+  'No D1 writes or migrations permitted in dashboard release');
 console.log('ISOLATION_GUARD_PASS: Discord-only Worker/D1. No YouTube/PLM targets. Offline build only.');
