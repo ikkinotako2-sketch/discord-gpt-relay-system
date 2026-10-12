@@ -21,7 +21,7 @@ function fixture(){
 }
 async function sessionFixture(db){
   const env={LOOP_DB:db,DISCORD_ALLOWED_USER_ID:OWNER,DASHBOARD_ENABLED:'true',
-    SWARM_API_ENABLED:'true',DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
+    SWARM_API_ENABLED:'true',SWARM_RUNNER_ENABLED:'true',DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
     DASHBOARD_COOKIE_KEY:'fake_testing_only_cookie_key_not_for_real_auth_1234'};
   const signed=await createDashboardSession(OWNER,env);
   const headers={Cookie:'dc_session='+signed};
@@ -77,4 +77,15 @@ test('wrong-origin read path is not considered the owned Command Center',async()
   const {db}=fixture(),auth=await sessionFixture(db);
   const response=await handleSwarmApi(new Request('https://example.invalid/command-center/api/swarm/overview',{headers:auth.headers}),auth.env);
   assert.equal(response.status,404);
+});
+
+test('read-only dashboard remains accessible but mutations fail closed if runner disabled',async()=>{
+  const {db}=fixture(),auth=await sessionFixture(db);
+  const env={...auth.env,SWARM_RUNNER_ENABLED:'false'};
+  const read=await handleSwarmApi(req('overview',{headers:auth.headers}),env);
+  assert.equal(read.status,200);
+  const info=await read.json();
+  assert.equal(info.runnerEnabled,false);
+  assert.equal(info.csrfToken,auth.csrf);
+  assert.equal((await handleSwarmApi(write('create',auth,{task:'draft',cycles:1}),env)).status,503);
 });

@@ -33,12 +33,13 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
   if(url.pathname===BASE+'overview'&&request.method==='GET'){
     try {
       const snapshot=await ownerSnapshot(env.LOOP_DB,session.id);
-      return json({...snapshot,live:true,modelLinked:false});
+      return json({...snapshot,csrfToken:session.csrf,stateSource:'discord_only_d1',live:true,modelLinked:false,runnerEnabled:env?.SWARM_RUNNER_ENABLED==='true'});
     }catch{return json({error:'READ_UNAVAILABLE'},503);}
   }
   if(request.method!=='POST'||!['create','stop','resume'].includes(url.pathname.slice(BASE.length)))
     return json({error:'NOT_FOUND'},404);
   if(!sameOriginWrite(request,session))return json({error:'CSRF_OR_ORIGIN'},403);
+  if(env?.SWARM_RUNNER_ENABLED!=='true')return json({error:'RUNNER_NOT_ENABLED'},503);
   let body;
   try{body=await inputJson(request);}catch{return json({error:'INVALID_BODY'},400);}
   try{
