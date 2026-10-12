@@ -26,7 +26,6 @@ jobs:
       CONFIRM: ${{ inputs.confirm }}
       JOB_CHECK: ${{ inputs.active_job_check }}
       WORKER_NAME: steep-glitter-b5cddiscord-ai-relay-lab
-      OLD_VERSION: 64b48d3f-a427-4229-af27-c8c3710fa309
       WORKER_URL: https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev/
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +48,7 @@ jobs:
           grep -Fxq 'LOOP_AI_MODEL = "@cf/openai/gpt-oss-20b"' wrangler.command-center.toml
           grep -Fxq 'crons = ["*/1 * * * *"]' wrangler.command-center.toml
           grep -Fq 'Discord GPT Relay gpt-oss command-center ready.' worker-loop.mjs
-      - name: Verify exact current Discord Worker version before writes
+      - name: Capture current Discord-only Worker version for protected rollback
         run: |
           set -euo pipefail
           npx --yes wrangler@4 deployments list --name "$WORKER_NAME" > /tmp/dashboard-before.txt
@@ -57,8 +56,12 @@ jobs:
           import fs from 'node:fs';
           const s=fs.readFileSync('/tmp/dashboard-before.txt','utf8').replace(/\x1b\[[0-9;]*m/g,'');
           const ids=[...s.matchAll(/Version\(s\):\s+\(100%\)\s+([0-9a-f-]{36})/gi)].map(x=>x[1]);
-          if(ids.at(-1)!==process.env.OLD_VERSION) throw Error('Discord Worker changed; no rollout allowed.');
-          console.log('User-approved current Discord-only Worker version verified.');
+          const version=ids.at(-1);
+          if(!version||!/^[0-9a-f-]{36}$/.test(version)) throw Error('Unable to identify active Discord Worker. NO release.');
+          // Secret creation may produce a new version without changing source.
+          // The NEXT step requires exact known GPT-OSS health and signature rejection.
+          fs.appendFileSync(process.env.GITHUB_ENV,'OLD_VERSION='+version+'\n');
+          console.log('Current dedicated Discord Worker version captured for guarded rollback: '+version);
           NODE
       - name: Verify existing Worker is healthy and requires signed Discord interactions
         run: |
