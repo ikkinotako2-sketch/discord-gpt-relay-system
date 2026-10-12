@@ -28,7 +28,7 @@ test('legacy failure stops before any subsequent swarm call',async()=>{
 
 test('owner slash loop refuses new 2-role tasks in exclusive six-role mode',async()=>{
  const user='123456789012345678';
- const env={...flags,DISCORD_ALLOWED_USER_ID:user,LOOP_DB:{},AI:{run(){}}};
+ const env={...flags,DISCORD_ALLOWED_USER_ID:user,LOOP_DB:{prepare(){}},AI:{run(){}}};
  const reply=await handleLoopCommand({member:{user:{id:user}},data:{name:'loop'}},env);
  assert.match(reply,/排他運転中/);
 });
