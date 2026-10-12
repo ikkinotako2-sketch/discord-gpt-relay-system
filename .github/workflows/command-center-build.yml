@@ -1,0 +1,32 @@
+name: Command Center Offline Build
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'command-center/**'
+      - 'command-center.test.mjs'
+      - 'command-center-server.test.mjs'
+      - 'worker-loop.mjs'
+      - 'wrangler.command-center.toml'
+      - '.github/workflows/command-center-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test_and_build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run private dashboard, OAuth, D1 and legacy Discord regression tests
+        run: |
+          node --test command-center.test.mjs command-center-server.test.mjs worker-loop.test.mjs loop-d1.test.mjs loop-quality.test.mjs
+      - name: Compile with isolated dashboard configuration (NO DEPLOY)
+        run: |
+          npx --yes wrangler@4 deploy --config wrangler.command-center.toml --dry-run --outdir /tmp/ai-relay-command-center-build
+      - name: Confirm build only
+        run: |
+          echo 'COMMAND_CENTER_OFFLINE_BUILD_COMPLETE. No production or D1 changes.'
