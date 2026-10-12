@@ -48,7 +48,7 @@ export async function createTask(db,{runId,ownerId,task,cycles=1,now=Date.now()}
     // Distinguish an ordinary unique active-slot conflict from an actual D1 outage.
     const old=await db.prepare('SELECT run_id,owner_id FROM swarm_jobs WHERE run_id=?').bind(runId).first();
     if(old?.owner_id===ownerId)return {status:'existing',runId};
-    const active=await db.prepare('SELECT run_id FROM swarm_jobs WHERE active_slot=1 LIMIT 1').first();
+    const active=await db.prepare('SELECT run_id FROM swarm_jobs WHERE active_slot=1 LIMIT 1').bind().first();
     if(active)return {status:'busy'};
     throw error;
   }
