@@ -45,3 +45,4 @@ jobs:
           fi
           node command-center/release-d1-guard.mjs /tmp/discord-d1-check.json
           echo 'DISCORD_D1_READ_TOKEN_VERIFIED; ACTIVE_JOBS=0; NO D1 WRITES; NO DEPLOY'
+# Pre-cutover owner verification 2026-10-12; read-only; no deployment.
