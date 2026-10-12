@@ -48,3 +48,4 @@ jobs:
 # Pre-cutover owner verification 2026-10-12; read-only; no deployment.
 # Pre-neon-PR4 verification 2026-10-12; read-only; no production changes.
 # After-neon-merge D1 check 2026-10-12; no Worker, D1 data or secret mutations.
+# PR5-safe-redeploy-D1-check-20261012: signed-in owner approved read-only preflight; no deployment.
