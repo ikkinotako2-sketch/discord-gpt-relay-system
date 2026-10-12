@@ -1,5 +1,17 @@
 # Discord AI Relay Lab — verified status (2026-10-12)
 
+## Command Center publication safely BLOCKED — missing OAuth secret
+
+- User reported OAuth setup and termination of last loop. An owner-approved, exact Discord-only one-shot release was triggered.
+- First attempt [38196557792](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38196557792) stopped at a local one-shot workflow isolation assertion; **no Cloudflare writes**.
+- Guard adjusted for an owner-approved exact path/commit-message release; subsequent release [38196645635](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38196645635) passed resource isolation, captured current GPT-OSS version `64b48d3f-a427-4229-af27-c8c3710fa309`, and verified existing Worker GET and unsigned POST. It then **stopped before upload/promotion** because Cloudflare's secret-name list did **not** contain `DISCORD_OAUTH_CLIENT_SECRET`.
+- The existence of `DASHBOARD_COOKIE_KEY` is **not yet confirmed** because the previous guard stopped on the first missing name. The next check is updated to safely print all four required *names/presence only*, not secret values.
+- **NO new Worker code version deployed**, no D1 changes, no inference or Cron writes, no YouTube or Project Love Machine resources changed.
+- **Required owner step:** Add `DISCORD_OAUTH_CLIENT_SECRET` on the **existing Discord-only Cloudflare Worker** using the Discord Developer Portal OAuth2 Client Secret; also verify `DASHBOARD_COOKIE_KEY` exists as a Secret and has 32+ random characters. Never paste values in chat or repository.
+- Once both are confirmed, user can request a guarded retry. A changed Cloudflare Worker version caused by adding secrets is expected; release will capture current healthy baseline for rollback and verify old GPT-OSS readiness before any promotion.
+
+---
+
 ## FAST ISOLATED RELEASE READINESS — 2026-10-12
 
 - User explicitly requires the Command Center be finished quickly **without interfering with YouTube automation or any other project**.
