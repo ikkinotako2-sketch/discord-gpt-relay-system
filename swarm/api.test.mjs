@@ -24,7 +24,7 @@ function fixture(){
 async function sessionFixture(db){
   const env={LOOP_DB:db,DISCORD_ALLOWED_USER_ID:OWNER,DASHBOARD_ENABLED:'true',
     SWARM_API_ENABLED:'true',SWARM_RUNNER_ENABLED:'true',SWARM_EXECUTION_APPROVED:'true',
-    SWARM_EXCLUSIVE_MODE:'true',SWARM_DAILY_CALL_CAP:'6',DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
+    SWARM_EXCLUSIVE_MODE:'true',SWARM_DAILY_CALL_CAP:'6',SWARM_SMOKE_EXPIRES_AT:String(Date.now()+12*60*1000),DISCORD_OAUTH_CLIENT_SECRET:'local-test-secret-placeholder',
     DASHBOARD_COOKIE_KEY:'fake_testing_only_cookie_key_not_for_real_auth_1234'};
   const signed=await createDashboardSession(OWNER,env);
   const headers={Cookie:'dc_session='+signed};
