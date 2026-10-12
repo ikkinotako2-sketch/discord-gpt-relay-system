@@ -15,13 +15,13 @@ function fixture(){
  }}}}};
  let calls=0;
  const env={LOOP_DB:db,AI:{run:async()=>{calls++;return {response:'stage-confirmed-'+calls}}},
- SWARM_API_ENABLED:'true',SWARM_RUNNER_ENABLED:'true',SWARM_EXECUTION_APPROVED:'true',
+ SWARM_API_ENABLED:'true',SWARM_RUNNER_ENABLED:'true',SWARM_EXECUTION_APPROVED:'true',SWARM_EXCLUSIVE_MODE:'true',
  DISCORD_ALLOWED_USER_ID:OWNER,SWARM_DAILY_CALL_CAP:'1'};
  return {db,env,calls:()=>calls};
 }
 test('all three execution consent flags must be present',async()=>{
  const {env,calls}=fixture();
- for(const flag of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED']){
+ for(const flag of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
   assert.equal((await runConfiguredSwarmTick({...env,[flag]:'false'}, {now:DAY})).status,'disabled');
  }
  assert.equal(calls(),0);

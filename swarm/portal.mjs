@@ -2,6 +2,7 @@
 // Explicit SWARM_API_ENABLED and owner Discord OAuth session required.
 import {authenticateDashboard,dashboardConfigured,COMMAND_CENTER_ORIGIN} from '../command-center/server.mjs';
 import {handleSwarmApi} from './api.mjs';
+import {swarmModeEnabled} from './bridge.mjs';
 const PAGE='/command-center/swarm';
 const API='/command-center/api/swarm/';
 const HTML=`<!doctype html>
