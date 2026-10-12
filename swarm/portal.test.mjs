@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {handleSwarmRoute,renderPrivateSwarmPage} from './portal.mjs';
 import {createDashboardSession,COMMAND_CENTER_ORIGIN} from '../command-center/server.mjs';
-const URL=COMMAND_CENTER_ORIGIN+'/command-center/swarm/';
+const PAGE_URL=COMMAND_CENTER_ORIGIN+'/command-center/swarm/';
 const OWNER='123456789012345678';
 function fixture(){
  const sql=new DatabaseSync(':memory:');
@@ -21,17 +21,17 @@ function fixture(){
 }
 test('portal is disabled without explicit swarm API flag',async()=>{
  const {env}=fixture();
- assert.equal((await handleSwarmRoute(new Request(URL),{...env,SWARM_API_ENABLED:'false'})).status,503);
+ assert.equal((await handleSwarmRoute(new Request(PAGE_URL),{...env,SWARM_API_ENABLED:'false'})).status,503);
 });
 test('portal requires owner Discord OAuth session and redirects anonymous visitor',async()=>{
  const {env}=fixture();
- const result=await handleSwarmRoute(new Request(URL),env);
+ const result=await handleSwarmRoute(new Request(PAGE_URL),env);
  assert.equal(result.status,302);
  assert.equal(result.headers.get('location'),'/command-center/login');
 });
 test('owner portal is nonce-free hashed CSP with script and styles',async()=>{
  const {env}=fixture(),token=await createDashboardSession(OWNER,env);
- const response=await handleSwarmRoute(new Request(URL,{headers:{Cookie:'dc_session='+token}}),env);
+ const response=await handleSwarmRoute(new Request(PAGE_URL,{headers:{Cookie:'dc_session='+token}}),env);
  assert.equal(response.status,200);
  const csp=response.headers.get('content-security-policy');
  assert.match(csp,/script-src 'sha256-/);
