@@ -1,5 +1,18 @@
 # Discord AI Relay Lab — verified status (2026-10-12)
 
+## GPT-OSS pilot LIVE — 2026-10-12, real inference still unverified
+
+- User confirmed Cloudflare **Free** and supplied Discord `/loop-status` screenshot for latest run `d1559005008987430922`: `完了`, `4/4` AI calls, short greeting output. This supports the latest run being terminal. It does **not** independently prove all D1 rows are inactive; the prior remote D1 aggregate read [38191806194](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38191806194) failed before producing a count. No paid billing or quota upgrade occurred.
+- **Production GPT-OSS release: SUCCESS** [38193022088](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38193022088). All **72/72 offline tests PASS**. Preflight verified Llama quality-v2 version `91dd0014-179c-44b8-88ac-7084776f5e7b` at 100%, live health and 401 signature gate, candidate version existence and health.
+- **GPT-OSS version `64b48d3f-a427-4229-af27-c8c3710fa309` deployed to 100% production.** Live GET returns exact `Discord GPT Relay gpt-oss pilot ready.` with HTTP 200, unsigned POST HTTP 401; Cloudflare deployment list confirmed candidate at 100%. Automatic rollback **not needed**.
+- `/loop` now opts into Cloudflare Workers AI **`@cf/openai/gpt-oss-20b`** through a static binding variable, with at most two A→B rounds/four claimed inference calls. `/ask` and `/relay` should continue using Llama through their original implementation, but **their post-release live responses have not yet been user-tested**. Existing Cron, Discord registration and isolated D1 have not been modified by the version promotion.
+- **Actual GPT-OSS inference is NOT YET verified.** Deploy readiness only tests bindings/DB query and signature checking; next step is **one** short user-initiated Discord `/loop` job after checking `/loop-status`, then wait for `4/4` or collect failure/error without retrying blindly. Stop further attempts if quota or permission errors arise. Do not claim full GPT loop completion until this live test succeeds.
+- Emergency/manual rollback workflow now targets immediately preceding, user-tested **Llama quality-v2 `91dd0014-179c-44b8-88ac-7084776f5e7b`** (not older v1). Any rollback must be explicitly authorized; current rollout required none.
+- `gpt-oss-20b` is OpenAI's **open-weight model hosted by Cloudflare**, not consumer ChatGPT browser conversations and not the separately billed OpenAI API.
+- Free Workers AI allocation is limited; user explicitly rejects paid subscriptions, credits or upgrades.
+
+---
+
 ## Free-plan confirmation and active-job preflight (2026-10-12)
 
 - User confirmed **Cloudflare Free plan**. No billing upgrade or paid API has been requested or performed.
