@@ -45,6 +45,13 @@ test('owner portal is nonce-free hashed CSP with script and styles',async()=>{
  assert.match(html,/owner/i);
  assert.match(html,/引き継ぎJSON保存/);
 });
+test('owner STOP control remains available when runner is disabled, without allowing CREATE',async()=>{
+ const html=await (await renderPrivateSwarmPage()).text();
+ assert.ok(html.includes("$('stop').disabled=!job||!['queued','claimed','quota_wait'].includes(job.status)"));
+ assert.ok(html.includes("$('create').disabled=!runner"));
+ assert.ok(html.includes("$('resume').disabled=!runner"));
+ assert.ok(!html.includes("$('stop').disabled=!runner"));
+});
 test('portal only accepts exact same-origin routes, no arbitrary prefix',async()=>{
  const {env}=fixture();
  assert.equal((await handleSwarmRoute(new Request('https://example.invalid/command-center/swarm/'),env)).status,404);
