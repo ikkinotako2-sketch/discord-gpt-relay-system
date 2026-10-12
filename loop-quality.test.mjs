@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {loopStageMessages,evaluateLoopFinalOutput,generateLoopStageWithWorkersAI} from './loop-quality.mjs';
+import {loopStageMessages,evaluateLoopFinalOutput,generateLoopStageWithWorkersAI,resolveLoopModel,extractLoopFinalText,GPT_OSS_MODEL} from './loop-quality.mjs';
 
 test('every loop stage includes exact original instruction even if previous draft drifts',()=>{
   for(const role of ['planner','builder']){
@@ -51,4 +51,72 @@ test('invalid role is rejected before inference',async()=>{
   let called=0;
   await assert.rejects(()=>generateLoopStageWithWorkersAI({AI:{run:async()=>{called++;return {response:'ok'}}}},{role:'auditor',task:'test'}),TypeError);
   assert.equal(called,0);
+});
+
+test('existing production Llama remains the default; GPT-OSS requires explicit exact opt-in',()=>{
+  assert.equal(resolveLoopModel({}),'@cf/meta/llama-3.1-8b-instruct-fp8');
+  assert.equal(resolveLoopModel({LOOP_AI_MODEL:''}),'@cf/meta/llama-3.1-8b-instruct-fp8');
+  assert.equal(resolveLoopModel({LOOP_AI_MODEL:GPT_OSS_MODEL}),GPT_OSS_MODEL);
+  assert.throws(()=>resolveLoopModel({LOOP_AI_MODEL:'gpt-4o'}),/Unsupported LOOP_AI_MODEL/);
+  assert.throws(()=>resolveLoopModel({LOOP_AI_MODEL:'@cf/openai/gpt-oss-120b'}),/Unsupported LOOP_AI_MODEL/);
+});
+
+test('GPT-OSS uses Cloudflare binding, low reasoning and bounded tokens',async()=>{
+  const calls=[];
+  const env={LOOP_AI_MODEL:GPT_OSS_MODEL,AI:{run:async(model,request)=>{
+    calls.push({model,request});
+    return {response:'こんにちは！よろしくお願いします。'};
+  }}};
+  const result=await generateLoopStageWithWorkersAI(env,{
+    role:'builder',task:'短い挨拶文を改善して',context:'先ほどの短い挨拶案'
+  });
+  assert.match(result,/こんにちは/);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].model,'@cf/openai/gpt-oss-20b');
+  assert.equal(calls[0].request.reasoning_effort,'low');
+  assert.equal(calls[0].request.temperature,0.2);
+  assert.equal(calls[0].request.max_tokens,420);
+  assert.equal(JSON.parse(calls[0].request.messages[1].content).original_task,'短い挨拶文を改善して');
+});
+
+test('GPT-OSS prompt stage has lower generation ceiling and does not expose raw reasoning',async()=>{
+  const calls=[];
+  const env={LOOP_AI_MODEL:GPT_OSS_MODEL,AI:{run:async(model,request)=>{
+    calls.push(request);
+    return {choices:[{message:{content:'丁寧な挨拶文を作る。',reasoning:'internal'}}]};
+  }}};
+  const r=await generateLoopStageWithWorkersAI(env,{
+    role:'planner',task:'挨拶文の計画',context:''
+  });
+  assert.equal(r,'丁寧な挨拶文を作る。');
+  assert.equal(calls[0].max_tokens,300);
+  assert.equal(calls.length,1);
+});
+
+test('read only final message from supported provider outputs',()=>{
+  assert.equal(extractLoopFinalText({response:'  おはよう  '}),'おはよう');
+  assert.equal(extractLoopFinalText({choices:[{message:{content:'こんにちは'}}]}),'こんにちは');
+  const obj={output:[{type:'reasoning',content:[{type:'output_text',text:'PRIVATE REASONING'}]},
+    {type:'message',content:[{type:'output_text',text:'こんにちは！'}]}]};
+  assert.equal(extractLoopFinalText(obj),'こんにちは！');
+  assert.throws(()=>extractLoopFinalText({output:[{type:'reasoning',content:[{type:'output_text',text:'PRIVATE'}]}]}),/No final message/);
+  assert.throws(()=>extractLoopFinalText({response:''}),/No final message/);
+});
+
+test('unknown configured model causes zero inference calls',async()=>{
+  let n=0;
+  await assert.rejects(()=>generateLoopStageWithWorkersAI({
+    LOOP_AI_MODEL:'@cf/not-a-supported-model',
+    AI:{run:async()=>{n++;return {response:'unwanted'}}},
+  },{role:'planner',task:'Valid'}),/Unsupported LOOP_AI_MODEL/);
+  assert.equal(n,0);
+});
+
+test('too much generated text fails before persisting or retrying',async()=>{
+  let calls=0;
+  await assert.rejects(()=>generateLoopStageWithWorkersAI({
+    LOOP_AI_MODEL:GPT_OSS_MODEL,
+    AI:{run:async()=>{calls++;return {response:'あ'.repeat(3001)}}},
+  },{role:'builder',task:'短い挨拶文を改善して'}),/exceeds persisted output/);
+  assert.equal(calls,1);
 });
