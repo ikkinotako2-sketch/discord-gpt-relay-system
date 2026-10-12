@@ -112,8 +112,11 @@ jobs:
         run: |
           npx --yes wrangler@4 deploy --dry-run --config wrangler.command-center.toml --outdir /tmp/private-command-center
       - name: Verify zero active jobs from production Discord-only D1 before upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo 'BLOCKED: dedicated Discord D1 Read token missing'; exit 1; fi
           npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot = 1;" > /tmp/d1-before-upload.json
           node command-center/release-d1-guard.mjs /tmp/d1-before-upload.json
       - name: Save candidate as INACTIVE Worker version
@@ -155,8 +158,11 @@ jobs:
           console.log('Private dashboard candidate preview healthy. No traffic cutover yet.');
           NODE
       - name: Recheck production D1 zero active jobs immediately before promotion
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo 'BLOCKED: dedicated Discord D1 Read token missing'; exit 1; fi
           npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot = 1;" > /tmp/d1-before-promotion.json
           node command-center/release-d1-guard.mjs /tmp/d1-before-promotion.json
       - name: Promote only exact tested candidate to production
