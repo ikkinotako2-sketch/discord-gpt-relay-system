@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Enforce isolation from YouTube, PLM and other Cloudflare projects
+        run: node command-center/verify-isolation.mjs
       - name: Run private dashboard, OAuth, D1 and legacy Discord regression tests
         run: |
           node --test command-center.test.mjs command-center-server.test.mjs worker-loop.test.mjs loop-d1.test.mjs loop-quality.test.mjs
