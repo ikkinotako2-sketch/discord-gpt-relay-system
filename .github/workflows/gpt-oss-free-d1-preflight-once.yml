@@ -1,0 +1,43 @@
+name: GPT OSS D1 Active Job Read-Only Preflight Once
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'preflight/gpt-oss-free-d1-read.once'
+permissions:
+  contents: read
+jobs:
+  preflight:
+    if: ${{ github.event.head_commit.message == 'Verify active Discord jobs before approved GPT OSS rollout' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact Discord account and dedicated database
+        run: |
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          grep -Fxq 'database_name = "discord-relay-loop-state"' wrangler.gpt-oss.toml
+          grep -Fxq 'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"' wrangler.gpt-oss.toml
+      - name: Check status counts ONLY, never retrieve user tasks
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --json \
+            --config wrangler.gpt-oss.toml \
+            --command "SELECT COUNT(*) AS active_count FROM relay_loop_jobs WHERE active_slot = 1 AND status IN ('queued','claimed')" > /tmp/discord-loop-active-counts.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const value=JSON.parse(fs.readFileSync('/tmp/discord-loop-active-counts.json','utf8'));
+          const record=Array.isArray(value)?value[0]:value;
+          const count=record?.results?.[0]?.active_count;
+          if(record?.success!==true || !Number.isInteger(count))throw Error('D1 read failed or result unknown. No deployment permitted.');
+          console.log('D1_ACTIVE_JOBS='+count);
+          if(count!==0)throw Error('A Discord AI job is currently queued/running. NO model switching.');
+          console.log('D1_EMPTY_ACTIVE_SLOT_VERIFIED. Read-only. No production changes.');
+          NODE
