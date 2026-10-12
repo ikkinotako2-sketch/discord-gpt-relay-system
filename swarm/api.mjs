@@ -3,6 +3,8 @@
 import {authenticateDashboard,COMMAND_CENTER_ORIGIN,dashboardConfigured} from '../command-center/server.mjs';
 import {createTask,ownerSnapshot,requestStop,resumeAfterQuota} from './engine.mjs';
 import {buildSwarmHandoff} from './handoff.mjs';
+import {parseDailyCap} from './quota.mjs';
+import {swarmModeEnabled} from './bridge.mjs';
 
 const BASE='/command-center/api/swarm/';
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',
@@ -27,7 +29,7 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
   const url=new URL(request.url);
   if(url.origin!==COMMAND_CENTER_ORIGIN||!url.pathname.startsWith(BASE))return json({error:'NOT_FOUND'},404);
   // Separate, explicit feature flag. This module alone cannot activate a route.
-  if(env?.SWARM_API_ENABLED!=='true'||!dashboardConfigured(env))return json({error:'DISABLED'},503);
+  if(!swarmModeEnabled(env)||!dashboardConfigured(env))return json({error:'DISABLED'},503);
   const session=await authenticateDashboard(request,env);
   if(!session)return json({error:'AUTH_REQUIRED'},401);
   if(!env.LOOP_DB?.prepare)return json({error:'DB_UNAVAILABLE'},503);
@@ -44,7 +46,7 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
   if(request.method!=='POST'||!['create','stop','resume'].includes(url.pathname.slice(BASE.length)))
     return json({error:'NOT_FOUND'},404);
   if(!sameOriginWrite(request,session))return json({error:'CSRF_OR_ORIGIN'},403);
-  if(env?.SWARM_RUNNER_ENABLED!=='true'||env?.SWARM_EXECUTION_APPROVED!=='true')return json({error:'RUNNER_NOT_ENABLED'},503);
+  if(!swarmModeEnabled(env))return json({error:'RUNNER_NOT_ENABLED'},503);
   let body;
   try{body=await inputJson(request);}catch{return json({error:'INVALID_BODY'},400);}
   try{
@@ -52,6 +54,21 @@ export async function handleSwarmApi(request,env,{runIdFactory=()=>crypto.random
       if(typeof body.task!=='string'||!body.task.trim()||body.task.length>1000||
         !Number.isInteger(body.cycles)||body.cycles<1||body.cycles>3)
         return json({error:'INVALID_TASK'},400);
+      // Do not accept new 6-role jobs if the separate local budget is absent.
+      // It is NOT a guaranteed measure of Cloudflare's free Neuron balance.
+      try{parseDailyCap(env.SWARM_DAILY_CALL_CAP);}
+      catch{return json({error:'DAILY_CALL_CAP_REQUIRED'},503);}
+      // Exclusive mode: legacy Discord jobs must be terminal before accepting a swarm task.
+      // If D1 is unavailable or migration missing, fail closed.
+      let legacy;
+      try{
+        legacy=await env.LOOP_DB.prepare(
+          "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot=1"
+        ).first();
+      }catch{return json({error:'LEGACY_STATE_UNVERIFIED'},503);}
+      if(!legacy||!Number.isSafeInteger(legacy.active_jobs)||legacy.active_jobs<0)
+        return json({error:'LEGACY_STATE_UNVERIFIED'},503);
+      if(legacy.active_jobs>0)return json({error:'LEGACY_LOOP_ACTIVE'},409);
       const runId=runIdFactory();
       const result=await createTask(env.LOOP_DB,{runId,ownerId:session.id,
         task:body.task,cycles:body.cycles});
