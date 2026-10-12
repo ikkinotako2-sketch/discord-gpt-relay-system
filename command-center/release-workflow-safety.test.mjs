@@ -30,15 +30,15 @@ test('redeploy accepts only known signed Discord GPT-OSS health markers and pres
  const last=y.indexOf('- name: Verify new secret NAMES only, never their values',first);
  assert.ok(first>=0&&last>first);
  const preflight=y.slice(first,last);
- const set=preflight.match(/const allowed=new Set\\(\\[([^\\]]+)\\]\\);/);
- assert.ok(set,'must explicitly allow both known markers in preflight');
- assert.deepEqual([...set[1].matchAll(/'([^']+)'/g)].map(m=>m[1]),expected);
- assert.match(preflight,/get\\.status!==200 \\|\\| !allowed\\.has\\(marker\\) \\|\\| post\\.status!==401/);
- assert.doesNotMatch(preflight,/(?:marker\\.includes|marker\\.startsWith|post\\.status!==200)/);
+ const allowLine=preflight.split('\n').find(line=>line.includes('const allowed=new Set('));
+ assert.ok(allowLine,'must explicitly allow known markers in preflight');
+ assert.deepEqual([...allowLine.matchAll(/'([^']+)'/g)].map(m=>m[1]),expected);
+ assert.ok(preflight.includes('get.status!==200 || !allowed.has(marker) || post.status!==401'),'strict GET and unsigned POST checks required');
+ assert.ok(!preflight.includes('marker.includes(') && !preflight.includes('marker.startsWith('),'no loose health marker checks');
  const rollback=y.slice(y.indexOf('- name: Restore known GPT-OSS version'));
  assert.ok(rollback.includes("new Set(['"+expected.join("','")+"'])"),'rollback must recognize both known versions');
- assert.match(rollback,/\\.has\\(\\(await r\\.text\\(\\)\\)\\.trim\\(\\)\\)/);
- assert.match(y,/ids\\.at\\(-1\\)!==process\\.env\\.NEW_VERSION/,'must still verify correct version deployed');
+ assert.ok(rollback.includes('.has((await r.text()).trim())'),'rollback must check exact health marker');
+ assert.ok(y.includes('ids.at(-1)!==process.env.NEW_VERSION'),'must still verify correct version deployed');
 });
 test('only the two D1 SELECT steps use a separate D1 Read-only GitHub Secret',()=>{
  const secret='CLOUDFLARE_API_TOKEN: '+String.fromCharCode(36)+'{{ secrets.DISCORD_D1_READ_TOKEN }}';
