@@ -1,37 +1,36 @@
-# GPT-OSS-20B pilot — prepared, NOT publicly switched
+# GPT-OSS 20B Discord Loop — production pilot
 
-## Verified on 2026-10-12
+## Current state — 2026-10-12
 
-**STATUS: GPT_OSS_INACTIVE_UPLOADED / PREVIEW_HEALTH_PASS / LLAMA_PRODUCTION_UNCHANGED**
+**GPT-OSS deployed and HTTP verified; real model inference not yet tested.**
 
-- Cloudflare model: **`@cf/openai/gpt-oss-20b`**. This is an **OpenAI open-weight model hosted by Cloudflare**; it is NOT the consumer ChatGPT chat or a paid OpenAI GPT API session.
-- Existing production Worker stays at version **`91dd0014-179c-44b8-88ac-7084776f5e7b`** with Llama for current `/loop`.
-- Exactly scoped Discord Worker `steep-glitter-b5cddiscord-ai-relay-lab`; separate Discord-only D1 `discord-relay-loop-state`. No Project Love Machine data is involved.
-- New source: `loop-quality.mjs` supports **strict opt-in only** via a static Wrangler `LOOP_AI_MODEL` variable. Missing value defaults to the existing Llama. Unexpected model names fail closed **before** D1 claims a model call.
-- GPT-OSS is requested with `reasoning_effort: low`, at most 300 output tokens for planner and 420 for builder; the D1 limit of 3000 characters remains. Use `response` or supported final text formats; do not expose reasoning output.
-- Existing safeguards stay in force: owner-only commands, one active job globally, max 2 rounds, max 4 claimed calls, one step per minute, no automatic retries, D1 stop/unknown handling, only basic greeting-topic validation. `/ask` and `/relay` still use the original Llama pipeline.
-- GitHub Actions [38189809571](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38189809571): **72/72 offline tests PASS**, Wrangler dry-run PASS, **inactive** version upload PASS.
-- Inactive GPT-OSS Worker version: **`64b48d3f-a427-4229-af27-c8c3710fa309`**.
-- Official version preview URL: `https://64b48d3f-steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev/`.
-- GitHub Actions [38189921268](https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38189921268): preview GET 200 with exact `Discord GPT Relay gpt-oss pilot ready.`; unsigned POST 401; original production GET 200 with `Discord GPT Relay loop-v2 task-focus ready.`, unsigned POST 401. **No actual GPT-OSS inference calls were made**.
-- Cloudflare version upload by itself does NOT change production traffic or Cron.
+- User confirmed Cloudflare Free plan. No purchase or plan upgrade was made.
+- Latest owner-only Discord status screenshot showed Llama run d1559005008987430922 terminal, completed with 4/4 calls. A global D1 active-job query from GitHub did not succeed, so only the latest run has been verified terminal.
+- Preview and inactive upload: GitHub Actions 38189809571, 72/72 offline tests PASS; candidate version 64b48d3f-a427-4229-af27-c8c3710fa309.
+- Verified preview HTTP 200, signature-less POST 401: GitHub Actions 38189921268.
+- Approved production promotion: GitHub Actions 38193022088, SUCCESS, 72/72 tests PASS. The candidate was promoted to 100% production.
+- After propagation, GET returned HTTP 200 and 'Discord GPT Relay gpt-oss pilot ready.'. Unsigned Discord POST returned HTTP 401. Live deployment list matched the candidate version.
+- The /loop handler now uses Cloudflare-hosted OpenAI open-weight gpt-oss-20b; existing /ask and /relay still use their original Llama implementations.
+- Existing dedicated Discord-only D1, once-a-minute Cron trigger, one-active-job limit, owner allowlist, at most 2 rounds / 4 model calls, STOP and no-blind-retry rules remain.
+- The consumed one-shot release trigger and workflow were removed after success. Previous working Llama quality-v2 version 91dd0014-179c-44b8-88ac-7084776f5e7b is the pinned manual rollback target.
 
-## Before turning GPT-OSS on for real
+## Critical outstanding checks
 
-1. **Account owner confirms Cloudflare Workers AI is on the Free plan**, and that no spending, billing plan upgrade or extra token purchases are authorized. Cloudflare documents that Workers Free has **10,000 free Neurons/day** and stops on exhaustion. Model usage is not infinite and other AI usage shares this allocation.
-2. Owner checks `/loop-status` and confirms **no active job** (`completed` / `failed` / `stopped`, not `queued` or `claimed`). Switching AI models mid-job is not permitted.
-3. A separately approved release may use the staged `.github/workflows/gpt-oss-pilot-release.yml`, gated by exact Worker, D1 ID, current live version, preview health, 72+ tests, version UUID and rollback to Llama quality-v2. **Do not run it just to test the setup.**
-4. After code promotion, user first confirms `/ask`, `/relay`, and `/loop-status` still work; then performs exactly **one short** `/loop` experiment (max four GPT-OSS calls, consuming Cloudflare free neurons). Monitor `/loop-status`. Errors or 'unknown' are **not** automatically retried.
-5. On any regression, restore previous user-tested Llama version `91dd0014-179c-44b8-88ac-7084776f5e7b`, not the older pre-loop version. Cron and command registration are separate; do not replace them blindly.
+- GPT-OSS has NOT yet returned a verified real response. Offline mocks and GET health only validate routing and code, not real inference.
+- Test existing /ask and /relay after the model swap, test /loop-stop separately, and monitor free-tier quota.
+- The most recent screenshot proves the latest prior job completed, but not a global D1 active-job count.
+- This is Cloudflare Workers AI gpt-oss, not the consumer ChatGPT interface or automated ChatGPT-chat handoff.
 
-## What has NOT been verified
+## One controlled verification test
 
-- **No actual GPT-OSS response has been seen yet.** Offline mocks and preview health do not prove inference works, nor Japanese quality or speed.
-- There is no automatic chat-to-chat consumer ChatGPT handoff. These are Cloudflare-hosted model calls, not interactions with this ChatGPT conversation.
-- There is no independent Discord connector for this conversation, and writing files via the GitHub connector does not establish a Discord bridge to this chat.
-- Cloudflare Free account status/remaining quota has **not** been inspected via authenticated billing tools.
+Use /loop-status first and confirm no queued or running job.
+Submit one short Discord job: /loop task: こんにちはを使った短い挨拶文を作って
+Then use /loop-status about once a minute, looking for completed, 4/4, and a relevant final answer.
+If it reports failure/unknown or quota exceeded, DO NOT automatically retry; gather the status for diagnosis.
+All model calls are subject to Cloudflare Free daily quota. No paid usage is authorized.
 
-### References
+## Evidence
 
+- https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/actions/runs/38193022088
 - https://developers.cloudflare.com/workers-ai/models/gpt-oss-20b/
 - https://developers.cloudflare.com/workers-ai/platform/pricing/
