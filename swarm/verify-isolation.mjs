@@ -32,7 +32,7 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/MIGRATION_READINESS.md','swarm/schema-readiness.test.mjs',
     '.github/workflows/swarm-offline-tests.yml'
   ]);
-  const smokeFiles=new Set(['swarm/portal.mjs','swarm/portal-client-stop.test.mjs','swarm/verify-isolation.mjs','swarm/portal.test.mjs']);
+  const smokeFiles=new Set(['swarm/portal.mjs','swarm/portal-client-stop.test.mjs','swarm/verify-isolation.mjs','swarm/portal.test.mjs','swarm/bridge.mjs','swarm/bridge.test.mjs','swarm/cron.mjs','swarm/cron.test.mjs','swarm/api.test.mjs','swarm/SMOKE_TEST_SAFE_RUNBOOK.md']);
   const illegal=paths.filter(path=>smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
