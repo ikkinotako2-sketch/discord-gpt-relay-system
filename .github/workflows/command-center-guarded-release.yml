@@ -68,7 +68,9 @@ jobs:
             fetch(u,{signal:AbortSignal.timeout(12000)}),
             fetch(u,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)})
           ]);
-          if(get.status!==200 || (await get.text()).trim()!=='Discord GPT Relay gpt-oss pilot ready.' || post.status!==401)
+          const marker=(await get.text()).trim();
+          const allowed=new Set(['Discord GPT Relay gpt-oss pilot ready.','Discord GPT Relay gpt-oss command-center ready.']);
+          if(get.status!==200 || !allowed.has(marker) || post.status!==401)
             throw Error('Existing GPT-OSS worker failed signature/health check. Stop.');
           console.log('Original GPT-OSS loop is healthy; no job was submitted.');
           NODE
@@ -111,6 +113,14 @@ jobs:
       - name: Compile only without changing production
         run: |
           npx --yes wrangler@4 deploy --dry-run --config wrangler.command-center.toml --outdir /tmp/private-command-center
+      - name: Verify zero active jobs from production Discord-only D1 before upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo 'BLOCKED: dedicated Discord D1 Read token missing'; exit 1; fi
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot = 1;" > /tmp/d1-before-upload.json
+          node command-center/release-d1-guard.mjs /tmp/d1-before-upload.json
       - name: Save candidate as INACTIVE Worker version
         id: upload
         run: |
@@ -149,6 +159,14 @@ jobs:
             throw Error('Private preview did not confirm required OAuth secrets, D1 and Discord signature gate');
           console.log('Private dashboard candidate preview healthy. No traffic cutover yet.');
           NODE
+      - name: Recheck production D1 zero active jobs immediately before promotion
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo 'BLOCKED: dedicated Discord D1 Read token missing'; exit 1; fi
+          npx --yes wrangler@4 d1 execute discord-relay-loop-state --remote --config wrangler.command-center.toml --json --command "SELECT COUNT(*) AS active_jobs FROM relay_loop_jobs WHERE status IN ('queued','claimed') OR active_slot = 1;" > /tmp/d1-before-promotion.json
+          node command-center/release-d1-guard.mjs /tmp/d1-before-promotion.json
       - name: Promote only exact tested candidate to production
         id: promote
         env:
@@ -214,7 +232,7 @@ jobs:
           for(let n=1;n<=8;n++){
             try{
               const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
-              if(r.status===200&&(await r.text()).trim()==='Discord GPT Relay gpt-oss pilot ready.')process.exit(0);
+              if(r.status===200&&new Set(['Discord GPT Relay gpt-oss pilot ready.','Discord GPT Relay gpt-oss command-center ready.']).has((await r.text()).trim()))process.exit(0);
             }catch{}
             if(n<8)await new Promise(r=>setTimeout(r,5000));
           }

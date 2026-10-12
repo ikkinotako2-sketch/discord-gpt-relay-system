@@ -1,0 +1,27 @@
+name: Neon Relay Cockpit Offline UI Tests (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'command-center/index.html'
+      - 'command-center/page.mjs'
+      - 'command-center-ui.test.mjs'
+      - '.github/workflows/neon-cockpit-offline.yml'
+permissions:
+  contents: read
+jobs:
+  isolated-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate markup, inline JS and truthful D1-backed stage rendering
+        run: node --test command-center-ui.test.mjs
+      - name: Run existing Discord private dashboard and legacy safety regressions
+        run: |
+          node --test command-center.test.mjs command-center-server.test.mjs worker-loop.test.mjs loop-d1.test.mjs loop-quality.test.mjs
+          node command-center/verify-isolation.mjs
+      - name: Confirm no production operations
+        run: echo 'NEON_COCKPIT_OFFLINE_SUCCESS; NO Worker deploy, D1 queries or writes, model calls, other project changes'
