@@ -4,6 +4,7 @@
 import previousWorker, {validDiscordRequest, respondToDiscord} from './worker-relay.mjs';
 import {generateLoopStageWithWorkersAI,evaluateLoopFinalOutput,resolveLoopModel,GPT_OSS_MODEL} from './loop-quality.mjs';
 import {createDurableLoop, getLatestLoop, requestDurableStop, claimOneLoopStep, commitLoopOutput, failLoopClaim} from './loop-d1.mjs';
+import {handleDashboardRequest} from './command-center/server.mjs';
 
 const COMMANDS = new Set(['loop','loop-status','loop-stop']);
 const say = content => String(content).slice(0,1900);
@@ -101,6 +102,13 @@ export async function runOneScheduledLoopStep(env,{now=Date.now(),leaseOwner=cry
 
 export default {
   async fetch(request,env,ctx) {
+    // Private dashboard route is entirely separate from signed Discord interactions.
+    // Disabled by default: requires explicitly configured OAuth and session secrets.
+    const pathname=new URL(request.url).pathname;
+    if(pathname==='/command-center'||pathname.startsWith('/command-center/')){
+      try{return await handleDashboardRequest(request,env);}
+      catch{console.error('private_dashboard_request_failed');return new Response('Dashboard unavailable',{status:503});}
+    }
     if(request.method==='GET') {
       if(!env.LOOP_DB?.prepare || !env.AI?.run || !/^\d{15,22}$/.test(String(env.DISCORD_ALLOWED_USER_ID ?? ''))) return new Response('Loop configuration incomplete',{status:503});
       try {
