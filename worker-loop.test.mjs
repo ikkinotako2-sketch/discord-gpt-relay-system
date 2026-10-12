@@ -222,3 +222,45 @@ test('on-topic greeting completes in four calls and remains viewable to owner',a
   assert.match(row.previous_artifact,/こんにちは/);
   assert.match(await handleLoopCommand(interaction('loop-status',owner),env),/元の依頼: 短い挨拶文を改善して/);
 });
+
+test('GPT-OSS candidate health marker differs from production Llama marker',async()=>{
+  const req=new Request('https://example.invalid/',{method:'GET'});
+  const env={...envBase(db()),LOOP_AI_MODEL:'@cf/openai/gpt-oss-20b'};
+  const res=await worker.fetch(req,env,{});
+  assert.equal(res.status,200);
+  assert.equal(await res.text(),'Discord GPT Relay gpt-oss pilot ready.');
+  const wrong=await worker.fetch(req,{...env,LOOP_AI_MODEL:'@cf/unsafe/unknown'},{});
+  assert.equal(wrong.status,503);
+});
+
+test('GPT-OSS opt-in completes a bounded 4-step loop, keeping existing D1 state',async()=>{
+  const database=db(), calls=[];
+  const env={...envBase(database,async(model,payload)=>{
+    calls.push({model,payload});
+    return {response:calls.length===4?'はじめまして、こんにちは！':'挨拶文を改善する提案です。'};
+  }),LOOP_AI_MODEL:'@cf/openai/gpt-oss-20b'};
+  const now=Date.now();
+  const reply=await handleLoopCommand(interaction('loop',owner,[{name:'task',value:'こんにちはを使った短い挨拶文を作って'}]),env,now);
+  assert.match(reply,/受付完了/);
+  for(let i=0;i<4;i++){
+    const stage=await runOneScheduledLoopStep(env,{now:now+i*1000,leaseOwner:'gpt-oss-'+i});
+    assert.equal(stage.status,i===3?'completed':'queued');
+  }
+  assert.equal(calls.length,4);
+  assert.ok(calls.every(c=>c.model==='@cf/openai/gpt-oss-20b'));
+  assert.deepEqual(calls.map(c=>c.payload.max_tokens),[300,420,300,420]);
+  const row=await getLatestLoop(database,owner);
+  assert.equal(row.status,'completed');
+  assert.equal(row.calls_used,4);
+  assert.match(row.previous_artifact,/こんにちは/);
+});
+
+test('unsupported configured model never claims or burns a D1 model-call slot',async()=>{
+  const database=db(),env={...envBase(database),LOOP_AI_MODEL:'@cf/unknown/not-allowed'};
+  const now=Date.now();
+  await handleLoopCommand(interaction('loop',owner,[{name:'task',value:'Task'}]),env,now);
+  await assert.rejects(()=>runOneScheduledLoopStep(env,{now:now+1000,leaseOwner:'blocked'}),/Unsupported LOOP_AI_MODEL/);
+  const row=await getLatestLoop(database,owner);
+  assert.equal(row.status,'queued');
+  assert.equal(row.calls_used,0);
+});
