@@ -62,3 +62,30 @@ test('ambiguous inference error is terminal unknown and never auto retried',asyn
   assert.equal((await runOneSwarmStep({db,ai,budgetCheck:async()=> 'allowed',now:250,leaseOwner:'lease2'})).status,'idle');
   assert.equal(calls,1);
 });
+
+test('idle cron must not consume budget-monitor checks or inference',async()=>{
+  const db=fixture();let monitored=0,called=0;
+  const result=await runOneSwarmStep({db,ai:{run:async()=>{called++;return {response:'ok'};}},
+    budgetCheck:async()=>{monitored++;return 'allowed'},now:100});
+  assert.equal(result.status,'idle');
+  assert.equal(monitored,0);
+  assert.equal(called,0);
+});
+test('quota-paused job automatically continues only after legitimate allowance returns',async()=>{
+  const db=fixture();await createTask(db,{runId:'auto_resume',ownerId:OWNER,task:'draft',now:100});
+  let calls=0;
+  const ai={run:async()=>{calls++;return {response:'confirmed result'}}};
+  await runOneSwarmStep({db,ai,budgetCheck:async()=> 'quota_wait',now:110});
+  assert.equal((await ownerSnapshot(db,OWNER)).jobs[0].status,'quota_wait');
+  const result=await runOneSwarmStep({db,ai,budgetCheck:async()=> 'allowed',now:120,leaseOwner:'safe_resume'});
+  assert.equal(result.status,'queued');
+  assert.equal(calls,1);
+  assert.equal((await ownerSnapshot(db,OWNER)).jobs[0].lastCheckpoint,'confirmed result');
+});
+test('budget monitor outage never claims an AI step',async()=>{
+  const db=fixture();await createTask(db,{runId:'monitor_down',ownerId:OWNER,task:'draft',now:100});
+  const result=await runOneSwarmStep({db,ai:{run:async()=>{throw Error('must not run')}},
+    budgetCheck:async()=>{throw Error('service offline')},now:110});
+  assert.equal(result.reason,'BUDGET_MONITOR_ERROR');
+  assert.equal((await ownerSnapshot(db,OWNER)).jobs[0].callsUsed,0);
+});
