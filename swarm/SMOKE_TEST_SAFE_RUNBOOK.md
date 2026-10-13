@@ -39,3 +39,23 @@ The owner can use their ordinary browser already signed in to Cloudflare and Dis
 
 ### Production actions still blocked
 This Draft PR only contains isolated code/test/docs. **No merge, Worker deployment, flags, secrets, D1 writes or live AI jobs** occur from it.
+
+## 2026-10-13 — independent auto-OFF eligibility guard (STAGED; NO LIVE ACTION)
+
+A standalone **pure offline** module, `swarm/smoke-restore-guard.mjs`, now validates
+whether a future independent watchdog would be allowed to restore a known
+**OFF** Worker version. It requires exact Discord-only Cloudflare account,
+Worker and D1 identities, distinct known baseline and temporary-smoke version
+IDs, a single 100% live version, validated remote plain-text flags, local cap=6,
+and an exact absolute smoke expiry. If the live version differs from both known
+versions or deployments are split, it reports BLOCKED rather than blindly
+overwrite concurrent changes. It can also authorize an early owner emergency
+restore, but only for the exact known smoke version.
+
+**Important:** This module **does not perform restoration or schedule a
+watchdog**. This PR must not be presented as proof that remote SWARM flags will
+turn OFF on their own. Before a live test, a separate owner-approved OFF action,
+independent monitoring/recovery mechanism and a real end-to-end dry-run must
+succeed. A GitHub scheduled action alone is insufficient because GitHub can
+delay or drop scheduled workflows. The code-level expiry halts new AI stages,
+not in-flight calls nor the remote configuration binding state.
