@@ -20,7 +20,7 @@ function makeBindings(kind='smoke'){
 }
 function mockCloudflare({active=smoke,oldBindings=makeBindings('baseline'),
  smokeBindings=makeBindings('smoke'),split=false,concurrent=false,
- failPost=false,postWrong=false,healthStatus=401}={}){
+ failPost=false,postWrong=false,wrongReceipt=false,healthStatus=401}={}){
  let live=active,posted=0,gets=0;
  const calls=[];
  let id=first;
@@ -56,7 +56,7 @@ function mockCloudflare({active=smoke,oldBindings=makeBindings('baseline'),
    assert.equal(options.body.includes(baseline),true);
    id=second;
    live=postWrong?smoke:baseline;
-   return reply({id:second});
+   return reply({id:wrongReceipt?first:second});
   }
   throw Error('Unexpected mock URL '+method+' '+url);
  }
@@ -145,6 +145,11 @@ test('smoke cap/flags/deadline must match exact guard',async()=>{
 test('HTTP error or ambiguous POST is never retried',async()=>{
  const m=mockCloudflare({failPost:true});
  await rejects(restoreDiscordSmoke(input(m)),'CLOUDFLARE_REQUEST_UNCERTAIN');
+ assert.equal(m.posted,1);
+});
+test('post-restore receipt mismatch blocks without a second POST',async()=>{
+ const m=mockCloudflare({wrongReceipt:true});
+ await rejects(restoreDiscordSmoke(input(m)),'POST_RESTORE_DEPLOYMENT_RECEIPT_MISMATCH');
  assert.equal(m.posted,1);
 });
 test('post-deployment wrong version remains unverified and is not retried',async()=>{
