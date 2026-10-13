@@ -153,8 +153,9 @@ export async function restoreDiscordSmoke({
  const immediatelyBefore=await client.deployment();
  if(!sameDeployment(before,immediatelyBefore))block('CONCURRENT_DEPLOYMENT_CHANGED');
  // On any uncertain response DO NOT retry: a deployment might already exist.
- await client.restore(baselineVersion);
+ const createdDeploymentId=await client.restore(baselineVersion);
  const after=await client.deployment();
+ if(after.deploymentId!==createdDeploymentId)block('POST_RESTORE_DEPLOYMENT_RECEIPT_MISMATCH_DO_NOT_RETRY');
  if(after.versionId!==baselineVersion)block('POST_RESTORE_VERSION_UNVERIFIED_DO_NOT_RETRY');
  await client.health();
  // Worker version details are immutable; checked baseline OFF flags and D1 binding
