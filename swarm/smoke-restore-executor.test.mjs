@@ -20,7 +20,8 @@ function makeBindings(kind='smoke'){
 }
 function mockCloudflare({active=smoke,oldBindings=makeBindings('baseline'),
  smokeBindings=makeBindings('smoke'),split=false,concurrent=false,
- failPost=false,postWrong=false,wrongReceipt=false,healthStatus=401}={}){
+ failPost=false,postWrong=false,wrongReceipt=false,healthStatus=401,
+ extraLaterDeployment=false}={}){
  let live=active,posted=0,gets=0;
  const calls=[];
  let id=first;
@@ -41,7 +42,9 @@ function mockCloudflare({active=smoke,oldBindings=makeBindings('baseline'),
    if(concurrent&&gets===2){id=second;live=smoke;}
    return reply({deployments:[{id,created_on:'2026-10-13T05:00:00Z',
     versions:split?[{version_id:smoke,percentage:50},{version_id:baseline,percentage:50}]
-    :[{version_id:live,percentage:100}]}]});
+    :[{version_id:live,percentage:100}]},
+    ...(extraLaterDeployment?[{id:'cfe1d13b-c2ee-4298-9d6f-25478a6e03d8',
+      created_on:'2026-10-13T06:00:00Z',versions:[{version_id:baseline,percentage:100}]}]:[])]});
   }
   if(url.endsWith('/versions/'+baseline)){
    return reply({id:baseline,resources:{bindings:oldBindings}});
@@ -165,4 +168,32 @@ test('post-restore unsigned Discord gate is mandatory',async()=>{
 test('missing credentials or adapter never passes',async()=>{
  assert.throws(()=>createDiscordCloudflareClient({token:''}),RestoreBlocked);
  await rejects(restoreDiscordSmoke(input(mockCloudflare(),{client:{}})),'CLIENT_INCOMPLETE');
+});
+
+test('Cloudflare API first deployment is active even if later item has newer timestamp',async()=>{
+ const m=mockCloudflare({extraLaterDeployment:true});
+ const r=await restoreDiscordSmoke(input(m));
+ assert.equal(r.status,'RESTORED_VERSION_VERIFIED');
+ assert.equal(m.posted,1);
+});
+test('stale restore authorization blocks before any network call, even for emergency',async()=>{
+ for(const nowMs of [expiry+20*60*1000+1, expiry+7*24*60*60*1000]){
+  const m=mockCloudflare();
+  await rejects(restoreDiscordSmoke(input(m,{nowMs,ownerEmergency:true})),
+   'RESTORE_AUTHORIZATION_STALE_MANUAL_REVIEW_REQUIRED');
+  assert.equal(m.calls.length,0);
+ }
+});
+test('far-future emergency request cannot start before an approved smoke window',async()=>{
+ const m=mockCloudflare();
+ await rejects(restoreDiscordSmoke(input(m,{nowMs:expiry-20*60*1000-1,ownerEmergency:true})),
+  'RESTORE_WINDOW_TOO_EARLY');
+ assert.equal(m.calls.length,0);
+});
+test('invalid clock and expiry do not make Cloudflare calls',async()=>{
+ for(const nowMs of [NaN,Infinity,'2026-10-13']){
+  const m=mockCloudflare();
+  await rejects(restoreDiscordSmoke(input(m,{nowMs})),'RESTORE_TIME_UNVERIFIED');
+  assert.equal(m.calls.length,0);
+ }
 });

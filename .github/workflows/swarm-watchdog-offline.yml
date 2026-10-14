@@ -29,7 +29,7 @@ jobs:
           grep -Fxq 'WATCHDOG_EXPECTED_DEPLOYMENT_ID = "UNSET"' swarm/wrangler.watchdog.example.toml
           grep -Fxq 'WATCHDOG_EXPIRES_AT = "UNSET"' swarm/wrangler.watchdog.example.toml
       - name: Offline safety and one-shot tests without credentials
-        run: node --test swarm/smoke-watchdog.test.mjs
+        run: node --test swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs
       - name: Compile Cloudflare watchdog without touching production
         run: |
           npx --yes wrangler@4.119.0 deploy --dry-run --config swarm/wrangler.watchdog.example.toml --outdir /tmp/discord-watchdog-offline

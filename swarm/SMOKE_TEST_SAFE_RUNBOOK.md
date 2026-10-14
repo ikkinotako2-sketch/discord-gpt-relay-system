@@ -155,3 +155,101 @@ Verification gates:
 - The initial smoke remains BLOCKED until independent production monitoring,
   a verified rollback path, post-restore OFF-state checks, and free quota check
   are approved and observed in the dedicated Discord account.
+
+
+## 2026-10-13 — independent Free/production evidence preflight (OFFLINE ONLY)
+
+The staged module `swarm/smoke-live-preflight.mjs` is a pure, no-network
+readiness evaluator. It takes an externally obtained, 5-minute-fresh snapshot
+and rejects any missing or inconsistent evidence for the Discord-only target:
+current Worker deployment and distinct version IDs; exact four SWARM flags
+absent/false; correct Discord D1; zero legacy/6-role/UNKNOWN/STOP-pending
+jobs; zero running GitHub Actions; owner OAuth and unsigned signature
+rejection; live-tested rollback, independent Cron and permanent one-shot
+latch; release serialization and manual recovery/alerting.
+
+It also requires owner-verified Free plan and an available Cron slot,
+current UTC-day account-wide Workers AI usage from the dashboard,
+a conservative allowance reservation for the six attempts, no unrelated
+AI jobs, model access, and a 20-minute-or-shorter absolute deadline.
+A local reservation counter alone never proves Cloudflare's account-wide
+Neuron allowance.
+
+**It NEVER authorizes live inference or production changes.** Even when all
+supplied evidence fields pass, the output is OWNER_REVIEW_REQUIRED with
+REALTIME_QUOTA_NOT_RESERVED and NON_ATOMIC_DEPLOYMENT blockers. Cloudflare's
+Billable Usage API (released August 2026) refreshes daily, not per
+request, so it is not proof of a current free balance. Dashboard readings
+can also change after observation if another project uses the account.
+
+This preflight is an offline decision aid, not a token/scope verifier, login
+checker, provider-neuron quota allocator or an automatic release system.
+Live usage and version state must be checked again after separate owner
+approval and before any one-cycle test. If accurate account-wide usage or
+the independent fail-safe mechanism cannot be verified, remain BLOCKED.
+
+
+### 2026-10-13 Read-only live evidence adapter (offline-tested only)
+
+The module swarm/smoke-readonly-collector.mjs can collect exactly scoped
+Cloudflare Worker deployment/version/binding snapshots, unsigned POST rejection,
+two SELECT-only dedicated Discord D1 aggregate queries, and the public GitHub
+Actions statuses. It does NOT deploy, start inference, modify flags, write
+D1, or connect to YouTube/PLM. Secrets/token values are never included in
+its evidence report. This is a library function only: CI uses fake HTTP
+responses, no production credentials.
+
+The caller must supply separately approved, least-privilege Cloudflare
+Workers Scripts READ and dedicated Discord D1 READ tokens at runtime; never
+paste them into chat, commit them to the repository, or store them in this
+public Draft. No account-wide free-Neuron usage, owner OAuth, expiry, or
+rollback certification can be inferred from those GET/SELECT queries. The
+offline evaluator therefore remains BLOCKED until independent evidence
+is furnished, and even a complete evidence set is only OWNER_REVIEW_REQUIRED,
+not authorization to deploy. A failed read is not silently interpreted as zero.
+
+This reduces manual uncertainty in the eventual *read-only* production
+preflight without enabling any live action or altering the Free account.
+
+
+### Independent deadline alarm backup — code only
+
+A second scheduler now uses Durable Object Alarm in the separate staged Worker.
+During a strictly owner-approved expiry window of <=20 minutes, its Cron tick
+arms one deadline alarm in the dedicated DO. The existing independent Cron
+still checks expiry normally; when DO alarm fires, BOTH paths share the same
+permanent transactional 'attempted' marker BEFORE any Cloudflare restore POST.
+This prevents a duplicate restore request even though Cloudflare DO alarms
+have at-least-once delivery and can invoke an alarm again after a crash.
+No automatic retry after ambiguous API receipt.
+
+A DO alarm may be delayed or unavailable, and does NOT cancel an in-flight
+Workers AI request. Do not advertise a hard real-time guarantee; an owner
+fallback/notification and real live round trip remain blocked. Code tests
+use mock storage and never arm a real Cloudflare DO. The public Worker
+fetch endpoint remains HTTP 404 and it cannot be armed without the exact
+Discord-only approved target and absolute 20-minute-or-shorter deadline.
+
+
+### 2026-10-13 — Cloudflare REST contract and stale authorization checks
+
+The official Cloudflare API documentation states that the first entry of
+`GET /workers/scripts/{script}/deployments` is the latest deployment
+*actively serving traffic*. The staged executor now trusts the explicitly
+documented first entry, **not a re-sort of created_on timestamps**.
+Offline regression tests simulate conflicting timestamps and verify that
+the 100% active version and exact expected deployment ID are honored.
+
+The watchdog and directly callable executor now reject any restoration
+authorization more than 20 minutes after the explicit smoke expiry,
+without consuming the DO one-shot marker or contacting Cloudflare.
+The executor also rejects an emergency restore more than 20 minutes
+before the deadline. These are **stale-request safeguards**, not a
+guarantee of automatic remote OFF at the 20-minute expiry. A delayed
+Cron/alarm beyond the stale interval requires a separate manual
+investigation and separately approved remediation rather than blindly
+overwriting a newer Worker deployment. An independently reliable alert
+and manual recovery procedure remain a blocker to live deployment.
+
+No Cloudflare production requests, version restores, tokens, D1 mutations,
+SWARM flag changes or inference are part of this PR update.

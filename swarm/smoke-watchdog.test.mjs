@@ -95,6 +95,19 @@ test('expired watchdog restores baseline, checks all OFF flags, D1 counts and he
  assert.equal(b.reason,'ALREADY_ATTEMPTED_OR_LATCH_UNAVAILABLE');
  assert.equal(m.posts,1);
 });
+test('watchdog refuses ancient or badly delayed restore without D1, claim or Cloudflare traffic',async()=>{
+ for(const delay of [20*60*1000+1,24*60*60*1000]){
+  const m=fake();
+  let claimed=0;
+  const r=await runIndependentWatchdogTick(armed(),{
+   nowMs:expiry+delay,fetchImpl:m.fetchImpl,claimOnce:async()=>{claimed++;return true;}
+  });
+  assert.equal(r.status,'BLOCKED');
+  assert.equal(r.reason,'WATCHDOG_RESTORE_WINDOW_STALE_MANUAL_RECOVERY');
+  assert.equal(claimed,0);assert.equal(m.seen.length,0);
+  assert.equal(m.posts,0);assert.equal(m.d1Reads,0);
+ }
+});
 test('uncertain deployment POST is single attempt and cannot auto retry',async()=>{
  const m=fake({uncertainPost:true}),claim=once();
  const a=await runIndependentWatchdogTick(armed(),{nowMs:expiry+1000,fetchImpl:m.fetchImpl,claimOnce:claim});
@@ -148,7 +161,7 @@ test('D1 read client never sends SQL mutations or other database id',async()=>{
  assert.equal(m.d1Reads,2);
  assert.equal(m.seen.every(x=>x.url.includes(DISCORD_SMOKE_TARGET.databaseId)),true);
 });
-test('durable object latches a single claim persistently before network',async()=>{
+test('durable object rejects restore claim until independent alarm was confirmed',async()=>{
  const map=new Map();
  const storage={transaction:async cb=>cb({
   get:async k=>map.get(k),put:async(k,v)=>{map.set(k,v);}
@@ -156,6 +169,14 @@ test('durable object latches a single claim persistently before network',async()
  const obj=new SmokeRestoreOnce({storage},armed());
  const req=()=>new Request('https://watchdog.internal/claim',{method:'POST',
   headers:{'Content-Type':'application/json'},body:JSON.stringify({smokeVersion:smoke,expiryMs:expiry})});
+ // Missing alarm, armed but no setAlarm receipt, or wrong receipt: NONE can restore.
+ const none=await obj.fetch(req());assert.equal((await none.json()).claimed,false);
+ map.set('armed',{smokeVersion:smoke,expiryMs:expiry});
+ const incomplete=await obj.fetch(req());assert.equal((await incomplete.json()).claimed,false);
+ map.set('alarm_confirmed',{smokeVersion:smoke,expiryMs:expiry+1});
+ const mismatched=await obj.fetch(req());assert.equal((await mismatched.json()).claimed,false);
+ assert.equal(map.has('attempted'),false);
+ map.set('alarm_confirmed',{smokeVersion:smoke,expiryMs:expiry});
  const a=await obj.fetch(req());assert.equal((await a.json()).claimed,true);
  const b=await obj.fetch(req());assert.equal((await b.json()).claimed,false);
  assert.equal(map.get('attempted').smokeVersion,smoke);

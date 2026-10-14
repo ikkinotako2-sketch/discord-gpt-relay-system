@@ -46,10 +46,12 @@ function validateBindings(bindings,kind){
 function currentDeployment(data){
  const deployments=data && data.deployments;
  if(!Array.isArray(deployments)||deployments.length===0)block('DEPLOYMENTS_UNREADABLE');
- const sorted=[...deployments].sort((a,b)=>Date.parse(b.created_on)-Date.parse(a.created_on));
- const latest=sorted[0];
- if(!latest || !Number.isFinite(Date.parse(latest.created_on)) ||
-    (sorted.length>1 && Date.parse(sorted[1].created_on)===Date.parse(latest.created_on)))
+ // Cloudflare List Worker Deployments contract: the FIRST item is the
+ // active traffic-serving deployment. Never reorder based on created_on:
+ // timestamps are advisory and can make the wrong deployment appear current.
+ const latest=deployments[0];
+ if(!latest || typeof latest.created_on!=='string' ||
+    !Number.isFinite(Date.parse(latest.created_on)))
    block('LATEST_DEPLOYMENT_AMBIGUOUS');
  requireUuid(latest.id,'LATEST_DEPLOYMENT_ID_UNVERIFIED');
  if(latest.versions?.length!==1 || latest.versions[0].percentage!==100)
@@ -132,6 +134,15 @@ export async function restoreDiscordSmoke({
  requireUuid(smokeVersion,'SMOKE_VERSION_UNVERIFIED');
  requireUuid(expectedDeploymentId,'EXPECTED_DEPLOYMENT_UNVERIFIED');
  if(baselineVersion===smokeVersion)block('SAME_VERSION_NOT_ALLOWED');
+ // One-off authorization cannot outlive its original bounded smoke window.
+ // No stale replay even if the exact old deployment reappears much later.
+ if(!Number.isSafeInteger(nowMs)||!Number.isSafeInteger(expiryMs)||
+    !/^\d{13}$/.test(String(expiryMs)))
+  block('RESTORE_TIME_UNVERIFIED');
+ if(nowMs<expiryMs-20*60*1000)
+  block('RESTORE_WINDOW_TOO_EARLY');
+ if(nowMs>expiryMs+20*60*1000)
+  block('RESTORE_AUTHORIZATION_STALE_MANUAL_REVIEW_REQUIRED');
  if(!client || !['deployment','bindings','restore','health'].every(k=>typeof client[k]==='function'))
   block('CLIENT_INCOMPLETE');
  const before=await client.deployment();
