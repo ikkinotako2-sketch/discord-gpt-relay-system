@@ -90,3 +90,68 @@ No live smoke can start until all these external protections are implemented,
 approved and tested. An interrupted/uncertain POST is **not** automatically
 retried. A successful simulated restore is not proof of safe production shutdown.
 Never replace unknown versions or change unrelated YouTube/PLM resources.
+
+
+## 2026-10-13 — independent watchdog OFFLINE implementation (NOT DEPLOYED)
+
+The stacked branch after PR #10 introduces a *separate* Cloudflare Worker
+(source: swarm/smoke-watchdog-worker.mjs; sample config:
+swarm/wrangler.watchdog.example.toml). It is not imported by the existing
+Discord Worker and contains no credentials, enabled flags or runnable deployment
+workflow. GitHub Actions only executes mock/offline tests.
+
+Design:
+1. The existing primary Discord Worker six-role inference must independently
+   fail closed at the 20-minute absolute smoke expiry (already staged in PR #8).
+2. A separately approved WATCHDOG Worker Cron tick checks a precise one-smoke
+   authorization and exact account / Worker / Discord-only D1 / versions /
+   expected deployment ID. Any missing field, misconfiguration or early tick is
+   BLOCKED/WAIT without a network request.
+3. After expiry, a dedicated Durable Object SQLite-backed singleton
+   atomically stores an irrevocable one-shot attempt marker BEFORE any
+   restoration request. If the call times out or the script crashes, future
+   scheduled ticks will NOT automatically repeat it.
+4. The independent Worker reads legacy and swarm D1 status using a dedicated
+   D1 Read credential (only SELECT SQL); it never writes the Discord D1.
+5. The code-only PR #10 executor validates the OFF baseline and the exact
+   temporary smoke version, detects obvious concurrent Worker changes, and
+   attempts a single version restore. The watchdog independently rereads
+   the live version, four remote OFF bindings, dedicated D1 binding and job
+   counts after the restore.
+6. Existing queued, claimed, quota_wait, pending stop, unknown, or read failures
+   are reported as BLOCKED / INCONCLUSIVE even if the version was restored.
+   Restore does NOT cancel an in-flight model invocation and does not
+   change queued D1 jobs. Do not requeue UNKNOWN or assume a job completed.
+
+Important real-world limitations:
+- **NOT guaranteed real-time.** Cloudflare Cron itself can be delayed or
+  unavailable. No online/real-worker proof exists; code expiry is only an
+  additional barrier against starting new inference.
+- The deployment GET-before-POST check is not an atomic server-side
+  compare-and-swap. A concurrent operator deploying within that interval
+  could be overwritten. Full release serialization and an independent
+  external recovery/alerting plan remain separate required verification gates.
+- Durable Object marker is one-shot, so after ANY ambiguous result a human
+  must check remote state. The marker MUST NOT be silently cleared and
+  no automatic retry/rearm may happen.
+- Owner's explicit separate approval is required for provisioning the
+  independent Worker, Durable Object, Cron, secrets, D1 Read token, any
+  real rollback, or enabling AI; nothing here authorizes these actions.
+- The config is deliberately UNARMED with pinned versions/expiry UNSET.
+  Never place credentials in GitHub, source code, chat or wrangler config.
+- D1 read permissions and Worker edit permissions must be separately scoped
+  by the owner. Free entitlement, Workers AI Neuron usage, production jobs,
+  OAuth owner login, real disable round trip, token scope and preview/production
+  behavior require new live verification prior to initial inference.
+- No impact to existing Discord commands, YouTube, PLM or other Workers is
+  acceptable.
+
+Verification gates:
+- Unit tests: before/after deadline, once-only Durable Object claim, API
+  timeout without retry, concurrent/split version rejection, missing
+  credentials, wrong resource, D1 UNKNOWN/active, unreadable D1, remote
+  binding validation and original Discord security health.
+- Offline CI 3 checks PASS is only source/test readiness, NOT live proof.
+- The initial smoke remains BLOCKED until independent production monitoring,
+  a verified rollback path, post-restore OFF-state checks, and free quota check
+  are approved and observed in the dedicated Discord account.

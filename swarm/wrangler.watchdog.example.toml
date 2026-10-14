@@ -1,0 +1,36 @@
+# OFFLINE REFERENCE ONLY — DO NOT DEPLOY WITHOUT SEPARATE OWNER APPROVAL.
+# This is a SEPARATE Worker; never change the existing Discord Worker cron/config.
+name = "discord-smoke-independent-watchdog-staged"
+main = "smoke-watchdog-worker.mjs"
+compatibility_date = "2026-10-13"
+workers_dev = false
+
+# Intended future schedule only. A Cron trigger is not hard real-time.
+[triggers]
+crons = ["* * * * *"]
+
+# Requires prior authorization/approval of a dedicated SQLite-backed DO instance.
+[[durable_objects.bindings]]
+name = "WATCHDOG_ONCE"
+class_name = "SmokeRestoreOnce"
+
+[[migrations]]
+tag = "watchdog_v1"
+new_sqlite_classes = ["SmokeRestoreOnce"]
+
+# Deliberately OFF: a template must never include enabled credentials or opt-in.
+[vars]
+WATCHDOG_ARMED = "false"
+WATCHDOG_APPROVAL = "NOT_APPROVED"
+WATCHDOG_ACCOUNT_ID = "6c8ccd6aface937ab5dabef61cb64534"
+WATCHDOG_WORKER = "steep-glitter-b5cddiscord-ai-relay-lab"
+WATCHDOG_D1_ID = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"
+WATCHDOG_BASELINE_VERSION = "UNSET"
+WATCHDOG_SMOKE_VERSION = "UNSET"
+WATCHDOG_EXPECTED_DEPLOYMENT_ID = "UNSET"
+WATCHDOG_EXPIRES_AT = "UNSET"
+
+# Do not commit tokens to TOML / GitHub / chat.
+# Independently scoped secret NAMES needed only after separate approval:
+# WATCHDOG_RESTORE_TOKEN (Discord Worker-specific editor)
+# WATCHDOG_D1_READ_TOKEN (dedicated Discord D1 read)
