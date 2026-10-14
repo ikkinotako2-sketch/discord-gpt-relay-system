@@ -1,4 +1,6 @@
 import test from 'node:test';
+// Exercise the independent smoke rollback eligibility guard in existing offline CI.
+import './smoke-restore-guard.test.mjs';
 import assert from 'node:assert/strict';
 import {swarmModeEnabled,isSwarmRoute,runExclusiveScheduledTick} from './bridge.mjs';
 import worker,{handleLoopCommand} from '../worker-loop.mjs';
