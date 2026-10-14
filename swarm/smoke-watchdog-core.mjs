@@ -29,6 +29,10 @@ function validConfig(env,nowMs){
     !Number.isSafeInteger(nowMs))
   return blocked('INVALID_DEADLINE');
  const expiryMs=Number(env.WATCHDOG_EXPIRES_AT);
+ // No more than a bounded post-expiry recovery window: a weeks-old replay
+ // could overwrite a newer deployment even if the old IDs were somehow reused.
+ if(nowMs>expiryMs+20*60*1000)
+  return blocked('WATCHDOG_RESTORE_WINDOW_STALE_MANUAL_RECOVERY');
  // Before the deadline no Cloudflare API requests, D1 queries, or latch writes.
  if(nowMs<expiryMs)return {status:'WAIT',expiresAt:expiryMs};
  if(typeof env.WATCHDOG_RESTORE_TOKEN!=='string'||env.WATCHDOG_RESTORE_TOKEN.length<8 ||

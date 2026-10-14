@@ -22,7 +22,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const autoOffGuard=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/swarm-smoke-safe-auto-off-20261013';
   const restoreExecutor=['feature/swarm-smoke-safe-auto-off-20261013','main'].includes(base)&&process.env.GITHUB_HEAD_REF==='feature/swarm-smoke-restore-executor-20261013';
   const independentWatchdog=['feature/swarm-smoke-restore-executor-20261013','main'].includes(base)&&process.env.GITHUB_HEAD_REF==='feature/swarm-independent-watchdog-20261013';
-  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog)
+  const liveEvidence=['feature/swarm-independent-watchdog-20261013','main'].includes(base)&&process.env.GITHUB_HEAD_REF==='feature/swarm-live-preflight-evidence-20261013';
+  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -39,7 +40,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const autoOffFiles=new Set(['swarm/smoke-restore-guard.mjs','swarm/smoke-restore-guard.test.mjs','swarm/bridge.test.mjs','swarm/verify-isolation.mjs','swarm/SMOKE_TEST_SAFE_RUNBOOK.md']);
   const restoreExecutorFiles=new Set(['swarm/smoke-restore-executor.mjs','swarm/smoke-restore-executor.test.mjs','swarm/bridge.test.mjs','swarm/verify-isolation.mjs','swarm/SMOKE_TEST_SAFE_RUNBOOK.md']);
   const watchdogFiles=new Set(['swarm/smoke-watchdog-d1.mjs','swarm/smoke-watchdog-core.mjs','swarm/smoke-watchdog-worker.mjs','swarm/smoke-watchdog.test.mjs','swarm/wrangler.watchdog.example.toml','swarm/SMOKE_TEST_SAFE_RUNBOOK.md','swarm/bridge.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-watchdog-offline.yml']);
-  const illegal=paths.filter(path=>independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
+  const liveEvidencePaths=new Set(['swarm/smoke-live-preflight.mjs','swarm/smoke-live-preflight.test.mjs','swarm/smoke-readonly-collector.mjs','swarm/smoke-readonly-collector.test.mjs','swarm/smoke-watchdog-worker.mjs','swarm/smoke-watchdog-core.mjs','swarm/smoke-watchdog.test.mjs','swarm/smoke-watchdog-alarm.test.mjs','swarm/smoke-restore-executor.mjs','swarm/smoke-restore-executor.test.mjs','.github/workflows/swarm-watchdog-offline.yml','swarm/bridge.test.mjs','swarm/verify-isolation.mjs','swarm/SMOKE_TEST_SAFE_RUNBOOK.md']);
+  const illegal=paths.filter(path=>liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));
