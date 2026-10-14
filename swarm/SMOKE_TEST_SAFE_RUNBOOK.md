@@ -59,3 +59,34 @@ independent monitoring/recovery mechanism and a real end-to-end dry-run must
 succeed. A GitHub scheduled action alone is insufficient because GitHub can
 delay or drop scheduled workflows. The code-level expiry halts new AI stages,
 not in-flight calls nor the remote configuration binding state.
+
+
+## 2026-10-13 — staged Discord-only restore executor (NOT LIVE)
+
+The stacked draft branch has executable, dependency-injected code in
+swarm/smoke-restore-executor.mjs using Cloudflare Workers deployments and version
+details REST endpoints. Unit tests simulate the real HTTP GET/POST sequence;
+CI must never supply a real Cloudflare token to these tests.
+
+Before a real restore it requires, in addition to explicit one-shot owner
+approval, exact Discord account/Worker IDs, known distinct baseline/smoke version
+IDs, a pinned deployment ID, single 100% active version, matching D1 LOOP_DB
+binding and names of four Discord secrets in both versions. Baseline must have
+all SWARM flags absent/false; smoke version must have four true flags and
+SWARM_DAILY_CALL_CAP=6 and matching 13-digit absolute expiry. The existing
+eligibility guard determines whether restore is permitted, and a second deployment
+GET rejects detected concurrent deploys. After a one-shot restore POST, the
+executor checks the live version and unsigned Discord POST=401 and root health.
+
+**It does not yet provide unattended auto-OFF.** This file is not imported by a
+production Worker or deployed by CI. There is no independent recovery scheduler,
+no production controller feeding signed/pinned inputs, no real token-scope
+attestation, no real D1 terminal job verification, and no post-rollback remote
+bindings reread. Cloudflare API deployment is not an atomic compare-and-swap:
+a different operator deploying during the small GET-to-POST window could still be
+overwritten. Such races require release serialization / an external coordinator.
+
+No live smoke can start until all these external protections are implemented,
+approved and tested. An interrupted/uncertain POST is **not** automatically
+retried. A successful simulated restore is not proof of safe production shutdown.
+Never replace unknown versions or change unrelated YouTube/PLM resources.
