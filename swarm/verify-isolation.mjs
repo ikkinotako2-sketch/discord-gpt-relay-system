@@ -20,7 +20,7 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const smokeFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-smoke-stop-gate-20261012';
   const priorIntegration=[stackedBase,'main'].includes(base)&&process.env.GITHUB_HEAD_REF===stackedHead;
   const autoOffGuard=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/swarm-smoke-safe-auto-off-20261013';
-  const restoreExecutor=base==='feature/swarm-smoke-safe-auto-off-20261013'&&process.env.GITHUB_HEAD_REF==='feature/swarm-smoke-restore-executor-20261013';
+  const restoreExecutor=['feature/swarm-smoke-safe-auto-off-20261013','main'].includes(base)&&process.env.GITHUB_HEAD_REF==='feature/swarm-smoke-restore-executor-20261013';
   if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
