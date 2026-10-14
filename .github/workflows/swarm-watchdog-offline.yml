@@ -1,0 +1,37 @@
+name: Discord Independent Watchdog OFFLINE Build (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'swarm/**'
+      - '.github/workflows/swarm-watchdog-offline.yml'
+permissions:
+  contents: read
+jobs:
+  dry-run-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reject unrelated resources or files
+        run: node swarm/verify-isolation.mjs
+      - name: Enforce disabled reference-only watchdog
+        run: |
+          set -euo pipefail
+          grep -Fxq 'WATCHDOG_ARMED = "false"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_APPROVAL = "NOT_APPROVED"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_BASELINE_VERSION = "UNSET"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_SMOKE_VERSION = "UNSET"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_EXPECTED_DEPLOYMENT_ID = "UNSET"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_EXPIRES_AT = "UNSET"' swarm/wrangler.watchdog.example.toml
+      - name: Offline safety and one-shot tests without credentials
+        run: node --test swarm/smoke-watchdog.test.mjs
+      - name: Compile Cloudflare watchdog without touching production
+        run: |
+          npx --yes wrangler@4.119.0 deploy --dry-run --config swarm/wrangler.watchdog.example.toml --outdir /tmp/discord-watchdog-offline
+          test -d /tmp/discord-watchdog-offline
+          echo 'WATCHDOG_COMPILE_ONLY_SUCCESS - NO CLOUDFLARE API / D1 WRITE / DEPLOY'
