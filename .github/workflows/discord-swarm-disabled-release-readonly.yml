@@ -133,6 +133,43 @@ jobs:
           }
           console.log('WATCHDOG_PROBE_READ_ONLY_NO_CLOUDFLARE_MUTATION');
           NODE
+      - name: Count account-wide Cron triggers to assess Free slot (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const token=process.env.CF_WORKER_TOKEN;
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts';
+          async function get(url){
+            const r=await fetch(url,{method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('READ_UNVERIFIED_HTTP_'+r.status);
+            const data=await r.json();
+            if(data.success!==true)return null;
+            return data;
+          }
+          try{
+            const list=await get(root);
+            const scripts=list?.result;
+            if(!Array.isArray(scripts)||scripts.length>50||
+               (Number.isSafeInteger(list?.result_info?.total_count)&&
+                list.result_info.total_count!==scripts.length))throw Error('LIST_INCOMPLETE');
+            let count=0;
+            for(const worker of scripts){
+              if(typeof worker.id!=='string'||!/^[a-zA-Z0-9_-]+$/.test(worker.id))
+                throw Error('INVALID_SCRIPT_NAME');
+              const response=await get(root+'/'+encodeURIComponent(worker.id)+'/schedules');
+              if(!Array.isArray(response?.result?.schedules))throw Error('SCHEDULES_UNVERIFIED');
+              count+=response.result.schedules.length;
+            }
+            console.log('ACCOUNT_CRON_TRIGGER_COUNT='+count);
+            console.log('FREE_CRON_SPARE_SLOT_SNAPSHOT='+(count<5?'YES_NOT_RESERVED':'NO'));
+          }catch{
+            console.log('ACCOUNT_CRON_TRIGGER_COUNT=UNVERIFIED');
+            console.log('FREE_CRON_SPARE_SLOT_SNAPSHOT=UNKNOWN');
+          }
+          console.log('ACCOUNT_SCHEDULE_METADATA_GET_ONLY_NO_DEPLOY');
+          NODE
       - name: Verify no model calls, D1 writes, deployment, or secrets changes
         run: echo 'READ_ONLY_RELEASE_PREFLIGHT_COMPLETE_NO_DEPLOY_NO_MODEL_INFERENCE_NO_D1_WRITE_NO_SECRET_CHANGE'
 # 2026-10-12 owner-approved six-agent 1-cycle smoke preflight recheck; READ ONLY; no execution or flags.
@@ -143,3 +180,4 @@ jobs:
 
 # 2026-10-15 renewed Discord-only production read-only audit after merging PR 9-12; no deploy, mutation, inference, or cross-project access.
 # 2026-10-15 exact isolated watchdog deployment presence GET-only check; no workflow activation or cloud mutation.
+# 2026-10-15 exact account-wide Cron count read-only; no other Worker change and no secret output.
