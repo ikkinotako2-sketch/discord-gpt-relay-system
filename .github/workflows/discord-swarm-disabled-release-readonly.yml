@@ -111,6 +111,28 @@ jobs:
           if(!versions.length)throw Error('BLOCKED_ROLLBACK_VERSION_UNKNOWN');
           console.log('ROLLBACK_VERSION_CAPTURED_FORMAT_VALID; no version change');
           NODE
+      - name: Probe exact independent watchdog deployment presence (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const worker='discord-smoke-independent-watchdog-staged';
+          const url='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/'+worker+'/deployments';
+          const token=process.env.CF_WORKER_TOKEN;
+          if(!token)throw Error('READ_TOKEN_UNAVAILABLE');
+          const res=await fetch(url,{method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});
+          if(res.status===404){
+            console.log('INDEPENDENT_WATCHDOG_LIVE=ABSENT; no deployment performed');
+          }else if(res.status===200){
+            const obj=await res.json();
+            if(obj.success!==true||!Array.isArray(obj.result?.deployments))throw Error('WATCHDOG_REMOTE_RESPONSE_UNKNOWN');
+            console.log(obj.result.deployments.length>0?'INDEPENDENT_WATCHDOG_LIVE=PRESENT_NOT_VERIFIED':'INDEPENDENT_WATCHDOG_LIVE=NO_ACTIVE_DEPLOYMENT');
+          }else{
+            console.log('INDEPENDENT_WATCHDOG_LIVE=UNVERIFIED_HTTP_'+res.status);
+          }
+          console.log('WATCHDOG_PROBE_READ_ONLY_NO_CLOUDFLARE_MUTATION');
+          NODE
       - name: Verify no model calls, D1 writes, deployment, or secrets changes
         run: echo 'READ_ONLY_RELEASE_PREFLIGHT_COMPLETE_NO_DEPLOY_NO_MODEL_INFERENCE_NO_D1_WRITE_NO_SECRET_CHANGE'
 # 2026-10-12 owner-approved six-agent 1-cycle smoke preflight recheck; READ ONLY; no execution or flags.
@@ -120,3 +142,4 @@ jobs:
 # Read-only readiness recheck for 2026-10-14 after PR #8 one-shot release; no AI, DB writes or remote mutations.
 
 # 2026-10-15 renewed Discord-only production read-only audit after merging PR 9-12; no deploy, mutation, inference, or cross-project access.
+# 2026-10-15 exact isolated watchdog deployment presence GET-only check; no workflow activation or cloud mutation.
