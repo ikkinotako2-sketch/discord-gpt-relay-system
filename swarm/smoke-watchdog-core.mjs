@@ -49,7 +49,9 @@ export async function inspectPostRestore(client,d1Reader,version){
  const remote=await client.bindings(version);
  if(!Array.isArray(remote))return blocked('REMOTE_BINDINGS_UNVERIFIED');
  const d1=remote.filter(x=>x?.type==='d1');
- if(d1.length!==1||d1[0].name!=='LOOP_DB'||d1[0].database_id!==DISCORD_SMOKE_TARGET.databaseId)
+ const loopDb=remote.filter(x=>x?.name==='LOOP_DB');
+ if(d1.length!==1||loopDb.length!==1||loopDb[0]!==d1[0]||
+    d1[0].database_id!==DISCORD_SMOKE_TARGET.databaseId)
   return blocked('POST_RESTORE_D1_MISMATCH');
  for(const k of FLAGS){
   const matches=remote.filter(x=>x?.name===k);

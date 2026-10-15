@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import watchdog,{SmokeRestoreOnce} from './smoke-watchdog-worker.mjs';
-import {runIndependentWatchdogTick} from './smoke-watchdog-core.mjs';
+import {runIndependentWatchdogTick,inspectPostRestore} from './smoke-watchdog-core.mjs';
 import {createDiscordD1ReadClient,JOB_QUERIES} from './smoke-watchdog-d1.mjs';
 import {DISCORD_SMOKE_TARGET,FLAGS} from './smoke-restore-guard.mjs';
 const base='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
@@ -180,6 +180,20 @@ test('durable object rejects restore claim until independent alarm was confirmed
  const a=await obj.fetch(req());assert.equal((await a.json()).claimed,true);
  const b=await obj.fetch(req());assert.equal((await b.json()).claimed,false);
  assert.equal(map.get('attempted').smokeVersion,smoke);
+});
+test('post-restore verification rejects every shadow LOOP_DB name before D1 read',async()=>{
+ for(const extra of [
+  {name:'LOOP_DB',type:'plain_text',text:'shadow'},
+  {name:'LOOP_DB',type:'secret_text'},
+  {name:'LOOP_DB',type:'d1',database_id:DISCORD_SMOKE_TARGET.databaseId}
+ ]){
+  let snapshots=0;
+  const client={deployment:async()=>({versionId:base}),bindings:async()=>[...bind('baseline'),extra]};
+  const reader={snapshot:async()=>{snapshots++;return {clean:true,terminal:true};}};
+  const result=await inspectPostRestore(client,reader,base);
+  assert.equal(result.status,'BLOCKED');assert.equal(result.reason,'POST_RESTORE_D1_MISMATCH');
+  assert.equal(snapshots,0);
+ }
 });
 test('public watchdog HTTP endpoint never offers a manual POST trigger',async()=>{
  const r=await watchdog.fetch(new Request('https://watchdog.example/claim',{method:'POST'}));
