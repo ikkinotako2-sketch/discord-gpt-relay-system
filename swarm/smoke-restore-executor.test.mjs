@@ -134,6 +134,17 @@ test('D1 substitution, unexpected secret type, and baseline enabled flag block',
   assert.equal(m.posted,0);
  }
 });
+test('restoration refuses duplicated or shadowed LOOP_DB binding before POST',async()=>{
+ for(const extra of [
+  {name:'LOOP_DB',type:'plain_text',text:'shadow'},
+  {name:'LOOP_DB',type:'secret_text'},
+  {name:'LOOP_DB',type:'d1',database_id:DISCORD_SMOKE_TARGET.databaseId}
+ ]){
+  const m=mockCloudflare({oldBindings:[...makeBindings('baseline'),extra]});
+  await rejects(restoreDiscordSmoke(input(m)),'DISCORD_D1_BINDING_MISMATCH_baseline');
+  assert.equal(m.posted,0);
+ }
+});
 test('smoke cap/flags/deadline must match exact guard',async()=>{
  for(const mutation of [
   v=>v.map(x=>x.name==='SWARM_DAILY_CALL_CAP'?{...x,text:'18'}:x),

@@ -28,7 +28,10 @@ function exactPlain(bindings,name){
 function validateBindings(bindings,kind){
  if(!Array.isArray(bindings))block('UNREADABLE_'+kind+'_BINDINGS');
  const db=bindings.filter(b=>b && b.type==='d1');
- if(db.length!==1||db[0].name!=='LOOP_DB'||db[0].database_id!==DATABASE)
+ const loopDb=bindings.filter(b=>b && b.name==='LOOP_DB');
+ // A correctly configured D1 must not coexist with any shadow LOOP_DB binding.
+ if(db.length!==1||loopDb.length!==1||loopDb[0]!==db[0]||
+    db[0].database_id!==DATABASE)
   block('DISCORD_D1_BINDING_MISMATCH_'+kind);
  for(const name of REQUIRED_SECRETS){
   const found=bindings.filter(b=>b && b.name===name);
