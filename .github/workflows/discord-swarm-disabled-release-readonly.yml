@@ -118,3 +118,5 @@ jobs:
 # PR8 owner-only post-deploy verification 2026-10-13 JST; expected published main b013829022a69d0af770d2d1a3e0ae23422539b3. READ ONLY.
 # Read-only follow-up after PR8 live rollout, 2026-10-13 JST; confirm flags 0 and job 0; no mutation.
 # Read-only readiness recheck for 2026-10-14 after PR #8 one-shot release; no AI, DB writes or remote mutations.
+
+# 2026-10-15 renewed Discord-only production read-only audit after merging PR 9-12; no deploy, mutation, inference, or cross-project access.
