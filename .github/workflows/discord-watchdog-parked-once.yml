@@ -1,0 +1,142 @@
+name: Discord Independent Watchdog PARKED One-shot
+on:
+  push:
+    branches: [deploy/discord-watchdog-parked-20261015]
+    paths:
+      - '.github/workflows/discord-watchdog-parked-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-independent-watchdog-parked-once
+  cancel-in-progress: false
+jobs:
+  deploy-isolated-parked-only:
+    if: ${{ github.event.head_commit.message == 'Owner-approved isolated watchdog PARKED deploy once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: '6c8ccd6aface937ab5dabef61cb64534'
+      WATCHDOG_NAME: discord-smoke-independent-watchdog-staged
+      PRIMARY_NAME: steep-glitter-b5cddiscord-ai-relay-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline isolated watchdog tests (no credentials used by tests)
+        run: |
+          set -euo pipefail
+          node --test swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs swarm/smoke-restore-executor.test.mjs
+      - name: Preflight dedicated worker, OFF flags, clean D1 and Cron slot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/deploy/discord-watchdog-parked-20261015'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CF_D1_READ_TOKEN"
+          test "$CLOUDFLARE_ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          grep -Fxq 'name = "discord-smoke-independent-watchdog-staged"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'workers_dev = false' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_ARMED = "false"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_APPROVAL = "NOT_APPROVED"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_BASELINE_VERSION = "UNSET"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_SMOKE_VERSION = "UNSET"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_EXPECTED_DEPLOYMENT_ID = "UNSET"' swarm/wrangler.watchdog.example.toml
+          grep -Fxq 'WATCHDOG_EXPIRES_AT = "UNSET"' swarm/wrangler.watchdog.example.toml
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534',
+            primary='steep-glitter-b5cddiscord-ai-relay-lab',
+            parked='discord-smoke-independent-watchdog-staged';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts';
+          async function get(url,allow404=false){
+            const r=await fetch(url,{method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});
+            if(allow404&&r.status===404)return null;
+            if(r.status!==200)throw Error('READ_BLOCKED_'+r.status);
+            const obj=await r.json();
+            if(obj.success!==true)return null;
+            return obj.result;
+          }
+          const original=await get(root+'/'+primary+'/settings');
+          if(!Array.isArray(original?.bindings))throw Error('PRIMARY_BINDINGS_UNKNOWN');
+          for(const flag of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
+            const found=original.bindings.filter(b=>b?.name===flag);
+            if(found.length>1||(found.length===1&&(found[0].type!=='plain_text'||found[0].text!=='false')))
+              throw Error('PRIMARY_SWARM_NOT_OFF_'+flag);
+          }
+          const d1Bindings=original.bindings.filter(b=>b?.name==='LOOP_DB');
+          if(d1Bindings.length!==1||d1Bindings[0].database_id!=='d80b08a4-0ff7-4320-9575-0d3c55cf7aba')
+            throw Error('PRIMARY_D1_UNVERIFIED');
+          const d1=createDiscordD1ReadClient({token:process.env.CF_D1_READ_TOKEN});
+          const snap=await d1.snapshot();
+          if(!snap.clean)throw Error('DISCORD_D1_NOT_CLEAN');
+          const host='https://'+primary+'.ikkinotako2.workers.dev/';
+          const [health,unauth]=await Promise.all([
+            fetch(host,{signal:AbortSignal.timeout(12000)}),
+            fetch(host,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)})
+          ]);
+          if(health.status!==200||unauth.status!==401||
+            (await health.text()).trim()!=='Discord GPT Relay gpt-oss command-center ready.')
+            throw Error('PRIMARY_SECURITY_UNVERIFIED');
+          const prior=await get(root+'/'+parked+'/deployments',true);
+          if(prior!==null)throw Error('PARKED_WATCHDOG_ALREADY_EXISTS_DO_NOT_OVERWRITE');
+          const list=await get(root);
+          if(!Array.isArray(list)||list.length>50)throw Error('ACCOUNT_SCRIPT_LIST_UNVERIFIED');
+          let count=0;
+          for(const script of list){
+            if(!/^[a-zA-Z0-9_-]+$/.test(script?.id||''))throw Error('BAD_WORKER_ID');
+            const schedules=await get(root+'/'+script.id+'/schedules');
+            if(!Array.isArray(schedules?.schedules))throw Error('ACCOUNT_CRONS_UNVERIFIED');
+            count+=schedules.schedules.length;
+          }
+          if(count>3)throw Error('FREE_CRON_HEADROOM_UNVERIFIED');
+          console.log('PREFLIGHT_PASS_EXISTING_WORKER_OFF_D1_CLEAN_SIGNATURE_401_CROSS_PROJECT_UNTOUCHED');
+          console.log('PREFLIGHT_PASS_NEW_WATCHDOG_ABSENT_AND_CRON_HEADROOM');
+          NODE
+      - name: Deploy separate unarmed watchdog only (no AI, secrets or legacy Worker)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.119.0 deploy --config swarm/wrangler.watchdog.example.toml
+      - name: Verify parked remote bindings, standalone cron, no public Worker endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const script='discord-smoke-independent-watchdog-staged';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/'+script;
+          const headers={Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN};
+          async function get(url){
+            const r=await fetch(url,{headers,signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('POSTCHECK_READ_HTTP_'+r.status);
+            const b=await r.json();
+            if(b.success!==true)return null;
+            return b.result;
+          }
+          const settings=await get(root+'/settings');
+          if(!Array.isArray(settings?.bindings))throw Error('PARKED_BINDINGS_NOT_VERIFIED');
+          function one(name,value){
+            const found=settings.bindings.filter(b=>b?.name===name);
+            if(found.length!==1||found[0].type!=='plain_text'||found[0].text!==value)throw Error('PARKED_NOT_OFF_'+name);
+          }
+          one('WATCHDOG_ARMED','false');
+          one('WATCHDOG_APPROVAL','NOT_APPROVED');
+          one('WATCHDOG_BASELINE_VERSION','UNSET');
+          one('WATCHDOG_SMOKE_VERSION','UNSET');
+          const once=settings.bindings.filter(b=>b?.name==='WATCHDOG_ONCE');
+          if(once.length!==1||!String(once[0].type).includes('durable_object'))throw Error('WATCHDOG_DO_BINDING_MISSING');
+          const deployment=await get(root+'/deployments');
+          if(!Array.isArray(deployment?.deployments)||deployment.deployments.length===0)throw Error('PARKED_DEPLOYMENT_UNVERIFIED');
+          const schedules=await get(root+'/schedules');
+          if(!Array.isArray(schedules?.schedules)||schedules.schedules.length!==1||
+            schedules.schedules[0].cron!=='* * * * *')throw Error('PARKED_CRON_UNVERIFIED');
+          console.log('PARKED_WATCHDOG_REMOTE_OFF_VERIFIED');
+          console.log('PARKED_DO_SQLITE_BINDING_AND_CRON_VERIFIED_NO_AI_NO_SECRET_INJECTION');
+          NODE
+      - name: No inference, no flags enabled, no production Worker deployment
+        run: echo 'DISCORD_PARKED_WATCHDOG_DEPLOY_ONLY_COMPLETE'
