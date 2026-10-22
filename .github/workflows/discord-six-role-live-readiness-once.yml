@@ -78,13 +78,29 @@ jobs:
             throw Error('WATCHDOG_CRON_UNVERIFIED');
           for(const secret of ['WATCHDOG_RESTORE_TOKEN','WATCHDOG_D1_READ_TOKEN'])
             if(watchSecrets.filter(s=>s.name===secret).length!==1)throw Error('WATCHDOG_SCOPED_SECRET_MISSING');
-          if(!versions||!Array.isArray(versions.items??versions.versions))
-            console.log('VERSION_CATALOG_SHAPE=UNVERIFIED');
-          else {
-            const items=versions.items??versions.versions;
-            console.log('VERSION_CATALOG_ROWS='+items.length);
-            console.log('STAGED_VERSION_NOT_PROVEN_BY_SUMMARY');
+          const items=Array.isArray(versions?.items)?versions.items:
+            Array.isArray(versions?.versions)?versions.versions:null;
+          if(!items||items.length>40)throw Error('VERSION_CATALOG_INCOMPLETE_OR_TOO_LARGE');
+          console.log('VERSION_CATALOG_ROWS='+items.length);
+          let smokeCandidates=0,currentlySafe=0;
+          for(const item of items){
+            if(!/^[0-9a-f-]{36}$/.test(item?.id||''))continue;
+            const detail=await get(base+name+'/versions/'+item.id,narrow);
+            if(detail.id!==item.id||!Array.isArray(detail.resources?.bindings))continue;
+            const bs=detail.resources.bindings;
+            const matches=k=>bs.filter(b=>b?.name===k);
+            const safe=flags.every(k=>matches(k).length<=1&&
+              matches(k).every(x=>x.type==='plain_text'&&x.text==='false'));
+            const enabled=flags.every(k=>matches(k).length===1&&
+              matches(k)[0].type==='plain_text'&&matches(k)[0].text==='true');
+            if(safe)currentlySafe++;
+            if(enabled &&
+               matches('SWARM_DAILY_CALL_CAP').length===1 &&
+               matches('SWARM_DAILY_CALL_CAP')[0].text==='6')smokeCandidates++;
           }
+          console.log('VERSION_ALL_FLAGS_OFF_COUNT='+currentlySafe);
+          console.log('SMOKE_VERSION_WITH_FOUR_TRUE_AND_CAP6_COUNT='+smokeCandidates);
+          if(smokeCandidates===0)console.log('SMOKE_LIVE_LAUNCH_BLOCKER=NO_PREPARED_SIX_CALL_VERSION');
           const current=await get(base+name+'/versions/'+active,narrow);
           if(current.id!==active||!Array.isArray(current.resources?.bindings))throw Error('CURRENT_VERSION_UNVERIFIED');
           for(const key of flags){
