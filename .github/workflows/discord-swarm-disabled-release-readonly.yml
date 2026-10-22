@@ -170,6 +170,47 @@ jobs:
           }
           console.log('ACCOUNT_SCHEDULE_METADATA_GET_ONLY_NO_DEPLOY');
           NODE
+      - name: Probe Workers AI account usage analytics access (read-only GraphQL)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const token=process.env.CF_WORKER_TOKEN;
+          const now=new Date();
+          const start=now.toISOString().slice(0,10)+'T00:00:00Z';
+          const end=now.toISOString();
+          const query=`query($accountTag: string!,$start: Time!,$end: Time!){
+            viewer { accounts(filter: {accountTag:$accountTag}) {
+              aiInferenceAdaptiveGroups(filter:{datetime_gt:$start,datetime_lt:$end},limit:100){
+                count
+                sum { totalInputTokens totalOutputTokens }
+                dimensions { modelId }
+              }
+            }}
+          }`;
+          try{
+            const response=await fetch('https://api.cloudflare.com/client/v4/graphql',{
+              method:'POST',
+              headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+              body:JSON.stringify({query,variables:{
+                accountTag:'6c8ccd6aface937ab5dabef61cb64534',start,end}}),
+              signal:AbortSignal.timeout(15000)
+            });
+            if(response.status!==200){console.log('AI_ACCOUNT_ANALYTICS=UNAVAILABLE_HTTP_'+response.status);}
+            else{
+              const value=await response.json();
+              const rows=value?.data?.viewer?.accounts?.[0]?.aiInferenceAdaptiveGroups;
+              if(!Array.isArray(rows)||value.errors?.length)
+                console.log('AI_ACCOUNT_ANALYTICS=UNVERIFIED_SCHEMA_OR_SCOPE');
+              else{
+                const count=rows.reduce((sum,r)=>sum+(Number.isSafeInteger(r?.count)?r.count:0),0);
+                console.log('AI_ACCOUNT_ANALYTICS=AGGREGATES_AVAILABLE_NOT_NEURON_BILLING');
+                console.log('AI_ACCOUNT_INFERENCE_REQUESTS_TODAY='+count);
+              }
+            }
+          }catch{console.log('AI_ACCOUNT_ANALYTICS=UNVERIFIED_NETWORK');}
+          console.log('WORKERS_AI_NEURONS_USAGE=NOT_PROVEN_BY_GRAPHQL');
+          NODE
       - name: Verify no model calls, D1 writes, deployment, or secrets changes
         run: echo 'READ_ONLY_RELEASE_PREFLIGHT_COMPLETE_NO_DEPLOY_NO_MODEL_INFERENCE_NO_D1_WRITE_NO_SECRET_CHANGE'
 # 2026-10-12 owner-approved six-agent 1-cycle smoke preflight recheck; READ ONLY; no execution or flags.
@@ -183,3 +224,5 @@ jobs:
 # 2026-10-15 exact account-wide Cron count read-only; no other Worker change and no secret output.
 
 # 2026-10-22 independent safe state audit after parked Watchdog token binding.
+
+# 2026-10-22 read-only account AI analytics aggregate, NOT a neuron quota certification.
