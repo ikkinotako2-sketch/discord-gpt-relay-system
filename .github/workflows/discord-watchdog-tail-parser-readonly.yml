@@ -1,0 +1,70 @@
+name: Discord Watchdog Tail Parser Validation (READ ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-watchdog-tail-parser-readonly.yml']
+permissions: {contents: read}
+jobs:
+  tail-only:
+    if: ${{ github.event.head_commit.message == 'Read only Discord parked Cron tail shape once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: a8357494c7204c7d4939caddf902707430719713}
+      - name: Validate target is parked, then observe one Cron WITHOUT secrets or writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const root='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/discord-smoke-independent-watchdog-staged';
+          const h={Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN};
+          const r=await fetch(root+'/settings',{headers:h,signal:AbortSignal.timeout(12000)});
+          if(r.status!==200)throw Error('READ_FAILED');
+          const json=await r.json(),bs=json.result?.bindings;
+          if(json.success!==true||!Array.isArray(bs))throw Error('SETTINGS_MISSING');
+          for(const [k,v] of [['WATCHDOG_ARMED','false'],['WATCHDOG_APPROVAL','NOT_APPROVED']]){
+            if(bs.filter(x=>x.name===k).length!==1||bs.find(x=>x.name===k)?.text!==v)
+              throw Error('WATCHDOG_NOT_PARKED');
+          }
+          console.log('READ_ONLY_TAIL_PARKED_VERIFIED');
+          NODE
+          npx --yes wrangler@4.119.0 tail --config swarm/wrangler.watchdog.example.toml --format json >/tmp/discord-tail-format.jsonl 2>/tmp/discord-tail-errors.log &
+          pid=$!
+          sleep 82
+          kill "$pid" 2>/dev/null || true
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const lines=fs.readFileSync('/tmp/discord-tail-format.jsonl','utf8').split('\n').filter(Boolean);
+          let parsed=0,parseErrors=0,cronEvents=0,components=[],rawLogMsg=0;
+          for(const l of lines){
+            try{
+              const event=JSON.parse(l);parsed++;
+              if(JSON.stringify(event.event||{}).includes('scheduled'))cronEvents++;
+              for(const log of (event.logs||[])){
+                rawLogMsg++;
+                const vals=Array.isArray(log.message)?log.message:[log.message];
+                for(const msg of vals){
+                  if(typeof msg!=='string')continue;
+                  try{const x=JSON.parse(msg);if(['discord_smoke_watchdog','discord_smoke_alarm'].includes(x?.component))
+                    components.push(x.component+':'+x.status+':'+(x.reason||'-')+':'+(x.alarm||'-'));}
+                  catch{}
+                }
+              }
+            }catch{parseErrors++;}
+          }
+          console.log('RAW_TAIL_LINES='+lines.length);
+          console.log('PARSEABLE_TAIL_JSON='+parsed);
+          console.log('TAIL_NONJSON_LINES='+parseErrors);
+          console.log('TAIL_SCHEDULED_EVENTS='+cronEvents);
+          console.log('TAIL_LOG_MESSAGES='+rawLogMsg);
+          console.log('WATCHDOG_COMPONENT_LOGS='+components.join(';').slice(0,300));
+          const err=fs.readFileSync('/tmp/discord-tail-errors.log','utf8');
+          console.log('TAIL_ERR_AUTH='+(/authentication|unauthorized|permission|10000/i.test(err)));
+          console.log('TAIL_ERR_WS='+(/websocket|socket|handshake|connection/i.test(err)));
+          if(!components.some(x=>x.startsWith('discord_smoke_watchdog:BLOCKED:NOT_ARMED')))
+            throw Error('PARKED_CRON_COMPONENT_LOG_NOT_OBSERVABLE');
+          console.log('REAL_PARKED_CRON_TAIL_PARSER_PASS');
+          NODE
