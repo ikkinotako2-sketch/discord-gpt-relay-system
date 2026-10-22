@@ -1,0 +1,60 @@
+name: Discord Emergency Live-vs-Version GET Only
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-emergency-live-vs-version-20261022.yml']
+permissions: {contents: read}
+jobs:
+  truth:
+    if: ${{ github.event.head_commit.message == 'Audit Discord deployed version and route truth GET once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 'a8357494c7204c7d4939caddf902707430719713'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Compare live endpoint, active version and script flags with D1
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const base='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/';
+          const worker='steep-glitter-b5cddiscord-ai-relay-lab';
+          const v='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          const flags=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          async function get(s,token){
+            const r=await fetch(base+worker+s,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('GET_DENIED_'+r.status);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('UNVERIFIED_RESPONSE');return j.result;
+          }
+          const [settings,version,deployment,d1]=await Promise.all([
+            get('/settings',process.env.CF_TOKEN),
+            get('/versions/'+v,process.env.RESTORE_TOKEN),
+            get('/deployments',process.env.RESTORE_TOKEN),
+            createDiscordD1ReadClient({token:process.env.D1_READ_TOKEN}).snapshot()
+          ]);
+          const b=settings.bindings, vb=version.resources?.bindings;
+          if(!Array.isArray(b)||!Array.isArray(vb)||!d1.clean)
+            throw Error('BINDINGS_OR_D1_UNVERIFIED');
+          for(const f of flags){
+            const live=b.filter(x=>x.name===f),deployed=vb.filter(x=>x.name===f);
+            const classify=a=>a.length===0?'ABSENT':a.length!==1?'DUPLICATE':a[0].type!=='plain_text'?'OTHER_TYPE':
+               a[0].text==='true'?'TRUE':a[0].text==='false'?'FALSE':'OTHER_VALUE';
+            console.log('FLAG_'+f+'_SCRIPT='+classify(live)+'_VERSION='+classify(deployed));
+          }
+          const d=deployment.deployments?.[0];
+          console.log('ACTIVE_VERSION='+String(d?.versions?.[0]?.version_id));
+          console.log('ACTIVE_TRAFFIC='+String(d?.versions?.[0]?.percentage));
+          for(const path of ['/','/command-center/swarm','/command-center/api/swarm/status']){
+            const r=await fetch('https://'+worker+'.ikkinotako2.workers.dev'+path,{method:'GET',
+               signal:AbortSignal.timeout(12000)});
+            console.log('PRODUCTION_ROUTE_'+(path==='/'?'ROOT':path.endsWith('status')?'SWARM_API':'SWARM_UI')+'_HTTP='+r.status);
+          }
+          console.log('D1_CLEAN_ZERO='+d1.clean);
+          console.log('GET_ONLY_NO_INFERENCE_NO_WRITE');
+          NODE
