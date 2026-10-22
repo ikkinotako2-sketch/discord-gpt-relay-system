@@ -42,6 +42,13 @@ function object({alarmFails=false,alarmNotScheduled=false,confirmationFails=fals
  return {cfg,instance,map,storage,
   get alarm(){return alarm;},get setCount(){return setCount;},get claimedWrites(){return claimedWrites;}};
 }
+test('prearm before smoke deployment ID exists schedules a durable alarm',async()=>{
+ const o=object();o.cfg.WATCHDOG_EXPECTED_DEPLOYMENT_ID='PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT';
+ const result=await armWatchdogAlarm(o.cfg,{nowMs:before});
+ assert.equal(result.status,'ARMED');
+ assert.equal(o.alarm,expiry);
+ assert.equal(o.map.get('alarm_confirmed').smokeVersion,smoke);
+});
 test('Cron prearms DO alarm only when deadline <= 20 minutes and configuration exact',async()=>{
  const o=object();
  const first=await armWatchdogAlarm(o.cfg,{nowMs:before});

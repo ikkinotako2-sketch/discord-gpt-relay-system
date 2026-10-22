@@ -7,6 +7,8 @@ import {createDiscordD1ReadClient} from './smoke-watchdog-d1.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ARM='EXPLICIT_DISCORD_SMOKE_RESTORE_ONCE';
 const APPROVAL='RESTORE-DISCORD-SMOKE-BASELINE-ONCE';
+// Prearm before traffic switch. The future deployment ID does not yet exist.
+const PREARM='PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT';
 const NON_SECRET_FIELDS=Object.freeze([
  'WATCHDOG_ACCOUNT_ID','WATCHDOG_WORKER','WATCHDOG_D1_ID',
  'WATCHDOG_BASELINE_VERSION','WATCHDOG_SMOKE_VERSION',
@@ -22,7 +24,8 @@ function validConfig(env,nowMs){
   return blocked('TARGET_MISMATCH');
  const baselineVersion=env.WATCHDOG_BASELINE_VERSION,
   smokeVersion=env.WATCHDOG_SMOKE_VERSION,expectedDeploymentId=env.WATCHDOG_EXPECTED_DEPLOYMENT_ID;
- if(![baselineVersion,smokeVersion,expectedDeploymentId].every(x=>UUID.test(x||''))||
+ if(!UUID.test(baselineVersion||'')||!UUID.test(smokeVersion||'')||
+    (!UUID.test(expectedDeploymentId||'')&&expectedDeploymentId!==PREARM)||
     baselineVersion===smokeVersion)return blocked('UNPINNED_VERSIONS');
  if(!/^\d{13}$/.test(String(env.WATCHDOG_EXPIRES_AT||'')) ||
     !Number.isSafeInteger(Number(env.WATCHDOG_EXPIRES_AT)) ||
@@ -101,8 +104,22 @@ export async function runIndependentWatchdogTick(env,{
  let before=null;
  try{before=await d1Reader.snapshot();}catch{before=null;}
  try{
+  // A prearmed alarm can exist BEFORE the smoke deployment ID is issued.
+  // Capture that server-issued ID at recovery time, but ONLY for the two pinned
+  // versions, never for an unrelated version or a traffic-split deployment.
+  // restoreDiscordSmoke rereads the deployment both initially and immediately
+  // before POST; any mismatch fails closed. Cloudflare has no atomic CAS.
+  let confirmedDeploymentId=expectedDeploymentId;
+  if(expectedDeploymentId===PREARM){
+   const observed=await client.deployment();
+   if(observed.versionId!==baselineVersion&&observed.versionId!==smokeVersion)
+    return blocked('PREARM_UNKNOWN_LIVE_VERSION_NO_RESTORE');
+   if(!UUID.test(observed.deploymentId||''))
+    return blocked('PREARM_DEPLOYMENT_ID_UNVERIFIED');
+   confirmedDeploymentId=observed.deploymentId;
+  }
   const result=await restoreDiscordSmoke({client,baselineVersion,smokeVersion,
-   expectedDeploymentId,expiryMs,nowMs,execute:true,approval:APPROVAL});
+   expectedDeploymentId:confirmedDeploymentId,expiryMs,nowMs,execute:true,approval:APPROVAL});
   if(!['RESTORED_VERSION_VERIFIED','ALREADY_OFF'].includes(result.status))
    return blocked('RESTORE_OUTCOME_UNRECOGNIZED');
   const verified=await inspectPostRestore(client,d1Reader,baselineVersion);

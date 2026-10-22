@@ -71,6 +71,29 @@ function once(){
  let claimed=false;
  return async()=>{if(claimed)return false;claimed=true;return true;};
 }
+test('prearmed watchdog may capture ONLY the pinned smoke deployment ID after deadline',async()=>{
+ const m=fake(),env=armed();env.WATCHDOG_EXPECTED_DEPLOYMENT_ID='PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT';
+ const result=await runIndependentWatchdogTick(env,{nowMs:expiry+1000,
+  fetchImpl:m.fetchImpl,claimOnce:once()});
+ assert.equal(result.status,'OFF_VERIFIED',JSON.stringify(result));
+ assert.equal(m.posts,1);
+});
+test('prearm blocks unknown live version without changing any production deployment',async()=>{
+ const m=fake({live:'d6f56f53-faa5-49a7-865c-5b6d3bc83942'});
+ const env=armed();env.WATCHDOG_EXPECTED_DEPLOYMENT_ID='PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT';
+ const result=await runIndependentWatchdogTick(env,{nowMs:expiry+1,
+  fetchImpl:m.fetchImpl,claimOnce:once()});
+ assert.equal(result.reason,'PREARM_UNKNOWN_LIVE_VERSION_NO_RESTORE');
+ assert.equal(m.posts,0);
+});
+test('prearm while baseline remains live is already OFF without any restore POST',async()=>{
+ const m=fake({live:base});const env=armed();
+ env.WATCHDOG_EXPECTED_DEPLOYMENT_ID='PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT';
+ const result=await runIndependentWatchdogTick(env,{nowMs:expiry+1,
+  fetchImpl:m.fetchImpl,claimOnce:once()});
+ assert.equal(result.status,'OFF_VERIFIED',JSON.stringify(result));
+ assert.equal(m.posts,0);
+});
 test('unarmed watchdog and mismatched target never call network or claim',async()=>{
  const m=fake(), env=armed();env.WATCHDOG_ARMED='false';
  const a=await runIndependentWatchdogTick(env,{nowMs:expiry+1,fetchImpl:m.fetchImpl,claimOnce:()=>{throw Error('called')}});
