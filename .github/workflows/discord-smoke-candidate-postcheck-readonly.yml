@@ -1,0 +1,107 @@
+name: Discord Six-role Candidate Postcheck GET ONLY
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-smoke-candidate-postcheck-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: ${{ github.event.head_commit.message == 'Verify Discord candidate and production unchanged via GET once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '1e8edfdb887e23fc9e90e43425a53fee2cab6a0d' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Check candidate version, baseline, scoped bindings, and parked watchdog
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const primary='steep-glitter-b5cddiscord-ai-relay-lab';
+          const watch='discord-smoke-independent-watchdog-staged';
+          const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          const candidate='a796bf35-daf0-4bb5-9020-e6617a3de043';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/';
+          const flags=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          async function get(script,suffix,token){
+            if(!token)throw Error('READ_TOKEN_MISSING');
+            const response=await fetch(root+script+suffix,{
+              method:'GET',headers:{Authorization:'Bearer '+token},
+              signal:AbortSignal.timeout(13000)});
+            if(response.status!==200)throw Error('REMOTE_READ_DENIED_'+suffix+'_'+response.status);
+            const json=await response.json();
+            if(json.success!==true||!json.result)throw Error('REMOTE_RESULT_UNVERIFIED_'+suffix);
+            return json.result;
+          }
+          const [deploy,original,candidateV,watchSettings,secrets,schedules,d1]=await Promise.all([
+            get(primary,'/deployments',process.env.RESTORE_TOKEN),
+            get(primary,'/versions/'+baseline,process.env.RESTORE_TOKEN),
+            get(primary,'/versions/'+candidate,process.env.RESTORE_TOKEN),
+            get(watch,'/settings',process.env.CF_TOKEN),
+            get(watch,'/secrets',process.env.CF_TOKEN),
+            get(watch,'/schedules',process.env.CF_TOKEN),
+            createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN}).snapshot()
+          ]);
+          const current=deploy?.deployments?.[0];
+          if(!current||current.versions?.length!==1||
+             current.versions[0].percentage!==100||current.versions[0].version_id!==baseline)
+             throw Error('CURRENT_PRODUCTION_BASELINE_CHANGED');
+          if(original?.id!==baseline||candidateV?.id!==candidate)
+             throw Error('PINNED_VERSION_MISMATCH');
+          const o=original.resources?.bindings, c=candidateV.resources?.bindings;
+          if(!Array.isArray(o)||!Array.isArray(c))throw Error('VERSION_BINDINGS_MISSING');
+          const exact=(bs,k)=>bs.filter(x=>x?.name===k);
+          for(const k of flags){
+            const old=exact(o,k),newer=exact(c,k);
+            if(old.length>1||old.some(x=>x.type!=='plain_text'||x.text!=='false')||
+               newer.length!==1||newer[0].type!=='plain_text'||newer[0].text!=='true')
+               throw Error('SWARM_FLAG_MISMATCH_'+k);
+          }
+          if(exact(c,'SWARM_DAILY_CALL_CAP').length!==1||
+             exact(c,'SWARM_DAILY_CALL_CAP')[0].text!=='6')
+             throw Error('SIX_CALL_CAP_UNVERIFIED');
+          const expiry=exact(c,'SWARM_SMOKE_EXPIRES_AT');
+          if(expiry.length!==1||expiry[0].type!=='plain_text'||!/^\\d{13}$/.test(expiry[0].text))
+             throw Error('CANDIDATE_EXPIRY_UNVERIFIED');
+          for(const bs of [o,c]){
+            const d1s=exact(bs,'LOOP_DB');
+            if(d1s.length!==1||d1s[0].type!=='d1'||
+               d1s[0].database_id!=='d80b08a4-0ff7-4320-9575-0d3c55cf7aba')
+               throw Error('D1_BINDING_WRONG');
+            for(const k of ['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID',
+              'DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY'])
+              if(exact(bs,k).length!==1||exact(bs,k)[0].type!=='secret_text')
+                throw Error('DISCORD_SECRET_MISSING_'+k);
+          }
+          if(!d1.clean)throw Error('DISCORD_D1_NOT_CLEAN');
+          if(!Array.isArray(watchSettings?.bindings)||!Array.isArray(secrets)||
+             !Array.isArray(schedules?.schedules)||schedules.schedules.length!==1)
+             throw Error('WATCHDOG_METADATA_UNVERIFIED');
+          for(const [k,v] of [['WATCHDOG_ARMED','false'],['WATCHDOG_APPROVAL','NOT_APPROVED'],
+             ['WATCHDOG_BASELINE_VERSION','UNSET'],['WATCHDOG_SMOKE_VERSION','UNSET'],
+             ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','UNSET'],['WATCHDOG_EXPIRES_AT','UNSET']]){
+            const xs=exact(watchSettings.bindings,k);
+            if(xs.length!==1||xs[0].type!=='plain_text'||xs[0].text!==v)
+              throw Error('WATCHDOG_UNEXPECTED_'+k);
+          }
+          for(const name of ['WATCHDOG_D1_READ_TOKEN','WATCHDOG_RESTORE_TOKEN'])
+            if(secrets.filter(x=>x?.name===name).length!==1)
+              throw Error('WATCHDOG_SCOPED_SECRET_MISSING_'+name);
+          if(schedules.schedules[0].cron!=='* * * * *')
+            throw Error('WATCHDOG_CRON_UNVERIFIED');
+          console.log('CANDIDATE_UPLOAD_POSTCHECK_PASS_VERSION='+candidate);
+          console.log('CANDIDATE_EXPIRY_MS='+expiry[0].text);
+          console.log('CANDIDATE_EXPIRY_STILL_FUTURE='+(Number(expiry[0].text)>Date.now()));
+          console.log('BASELINE_STILL_LIVE_100_PERCENT='+baseline);
+          console.log('WATCHDOG_STILL_PARKED_AND_SECRETS_READY');
+          console.log('D1_ZERO_ACTIVE_UNKNOWN_PASS');
+          console.log('GET_ONLY_NO_PRIMARY_DEPLOY_NO_AI_NO_OTHER_PROJECT');
+          NODE
