@@ -64,6 +64,14 @@ jobs:
           const err=fs.readFileSync('/tmp/discord-tail-errors.log','utf8');
           console.log('TAIL_ERR_AUTH='+(/authentication|unauthorized|permission|10000/i.test(err)));
           console.log('TAIL_ERR_WS='+(/websocket|socket|handshake|connection/i.test(err)));
+          // Sanitized diagnostic excerpt: no Worker secret values, no HTTP headers.
+          const safeLine=x=>x.slice(0,180).replace(/Bearer\s+[^" ]+/gi,'Bearer [REDACTED]').replace(/(?:\d{1,3}\.){3}\d{1,3}/g,'[IP]');
+          for(let i=0;i<Math.min(lines.length,20);i++)
+            console.log('TAIL_SAMPLE_'+i+'='+safeLine(lines[i]));
+          console.log('TAIL_SUBSTRING_COMPONENT_PRESENT='+lines.some(l=>l.includes('discord_smoke_watchdog')));
+          console.log('TAIL_SUBSTRING_BLOCKED_PRESENT='+lines.some(l=>l.includes('NOT_ARMED')));
+          console.log('TAIL_STARTS_JSON_OBJECT='+lines.filter(l=>l.trimStart().startsWith('{')).length);
+
           if(!components.some(x=>x.startsWith('discord_smoke_watchdog:BLOCKED:NOT_ARMED')))
             throw Error('PARKED_CRON_COMPONENT_LOG_NOT_OBSERVABLE');
           console.log('REAL_PARKED_CRON_TAIL_PARSER_PASS');
