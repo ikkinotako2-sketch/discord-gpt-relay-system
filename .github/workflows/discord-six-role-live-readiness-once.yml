@@ -19,6 +19,8 @@ jobs:
       DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 1e8edfdb887e23fc9e90e43425a53fee2cab6a0d
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - name: Exact Discord-only read-only smoke feasibility survey
