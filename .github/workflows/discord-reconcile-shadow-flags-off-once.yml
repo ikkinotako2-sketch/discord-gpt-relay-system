@@ -1,0 +1,153 @@
+name: Discord Scoped SHADOW OFF Variable Reconcile (Version upload only)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-reconcile-shadow-flags-off-once.yml']
+permissions: {contents: read}
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  correct-shadow-flags:
+    if: ${{ github.event.head_commit.message == 'Owner-approved Discord shadow OFF reconcile once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: 'a8357494c7204c7d4939caddf902707430719713'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Inspect exact Discord Worker only, D1 and real serving safe version
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-disabled-release-gate-20261012'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$DISCORD_D1_READ_TOKEN"
+          node --test swarm/smoke-restore-guard.test.mjs swarm/smoke-restore-executor.test.mjs >/dev/null
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534', worker='steep-glitter-b5cddiscord-ai-relay-lab';
+          const api='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/'+worker;
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          async function get(s){
+            const r=await fetch(api+s,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('SCOPE_DENIED_'+r.status);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('REMOTE_READ_UNVERIFIED');return j.result;
+          }
+          const [settings,deployment,baseline,d1]=await Promise.all([
+            get('/settings'),get('/deployments'),get('/versions/18c379e8-e759-4b2f-8300-e7a4c8b39b83'),
+            createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN}).snapshot()
+          ]);
+          const active=deployment?.deployments?.[0];
+          if(active?.versions?.length!==1||active.versions[0].percentage!==100||
+             active.versions[0].version_id!=='18c379e8-e759-4b2f-8300-e7a4c8b39b83')
+            throw Error('LIVE_BASELINE_CHANGED');
+          const script=settings?.bindings,bv=baseline?.resources?.bindings;
+          if(!Array.isArray(script)||!Array.isArray(bv)||!d1.clean)
+            throw Error('BASELINE_BINDINGS_OR_JOBS_UNVERIFIED');
+          const flags=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          for(const key of flags){
+            const shadow=script.filter(b=>b?.name===key),safe=bv.filter(b=>b?.name===key);
+            if(shadow.length!==1||shadow[0].type!=='plain_text'||
+               shadow[0].text!=='true'||safe.length>1||
+               safe.some(b=>b.type!=='plain_text'||b.text!=='false'))
+              throw Error('EXPECTED_SCRIPT_SHADOW_DRIFT_NOT_PRESENT_'+key);
+          }
+          const expected=['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID','DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY'];
+          for(const bindings of [script,bv]){
+            for(const key of expected) {
+              const arr=bindings.filter(b=>b?.name===key);
+              if(arr.length!==1||arr[0].type!=='secret_text')throw Error('DISCORD_SECRET_BINDING_UNVERIFIED_'+key);
+            }
+            const d=bindings.filter(b=>b?.name==='LOOP_DB');
+            if(d.length!==1||d[0].type!=='d1'||d[0].database_id!=='d80b08a4-0ff7-4320-9575-0d3c55cf7aba')
+              throw Error('DISCORD_DB_BINDING_UNVERIFIED');
+          }
+          const home='https://'+worker+'.ikkinotako2.workers.dev';
+          const [health,ui,apiGate,unsigned]=await Promise.all([
+            fetch(home,{signal:AbortSignal.timeout(12000)}),
+            fetch(home+'/command-center/swarm',{signal:AbortSignal.timeout(12000)}),
+            fetch(home+'/command-center/api/swarm/status',{signal:AbortSignal.timeout(12000)}),
+            fetch(home,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)})
+          ]);
+          if(health.status!==200||ui.status!==503||apiGate.status!==503||unsigned.status!==401)
+            throw Error('LIVE_RUNTIME_NOT_DISABLED_OR_SIGNATURE');
+          console.log('SHADOW_FLAGS_TRUE_BUT_SERVING_BASELINE_OFF_CONFIRMED');
+          console.log('SCOPED_ONE_WORKER_SHADOW_RECONCILE_APPROVED');
+          NODE
+      - name: Construct exact Discord-only flags OFF nonserving config
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          let txt=fs.readFileSync('wrangler.command-center.toml','utf8');
+          for(const phrase of [
+            'name = "steep-glitter-b5cddiscord-ai-relay-lab"',
+            'main = "worker-loop.mjs"',
+            'keep_vars = true',
+            'database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"',
+            'crons = ["*/1 * * * *"]',
+            '[vars]'
+          ])if(!txt.includes(phrase))throw Error('UNEXPECTED_WRANGLER_CONFIGURATION');
+          const flags=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          for(const k of flags)if(txt.includes(k+' ='))throw Error('DUPLICATE_FLAG');
+          txt=txt.replace('[vars]\n','[vars]\n'+flags.map(k=>k+' = "false"').join('\n')+'\n');
+          fs.writeFileSync('wrangler.discord-flags-off-one-shot.toml',txt,{flag:'wx',mode:0o600});
+          console.log('NO_DEPLOY_OFF_VERSION_CONFIG_READY');
+          NODE
+          npx --yes wrangler@4.119.0 deploy --dry-run --config wrangler.discord-flags-off-one-shot.toml --outdir /tmp/discord-safe-off
+      - name: Upload a safe OFF VERSION, do not deploy traffic (Wrangler subdomain GET may fail)
+        shell: bash
+        run: |
+          set +e
+          npx --yes wrangler@4.119.0 versions upload --strict --keep-vars --config wrangler.discord-flags-off-one-shot.toml --message 'Discord-only script settings shadow flags OFF (nonserving)'
+          rc=$?
+          set -e
+          echo "WRANGLER_UPLOAD_EXIT_CODE=$rc"
+          echo 'POSTCHECK_MUST_PROVE_REMOTE_OFF_INDEPENDENTLY'
+      - name: Check exact script settings OFF and production baseline still unchanged
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const worker='steep-glitter-b5cddiscord-ai-relay-lab';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/'+worker;
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          async function get(s){
+            const res=await fetch(root+s,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(13000)});
+            if(res.status!==200)throw Error('POSTCHECK_READ_'+res.status);
+            const j=await res.json();if(j.success!==true||!j.result)throw Error('POSTCHECK_RESULT_UNVERIFIED');return j.result;
+          }
+          const [settings,deployment,d1]=await Promise.all([
+            get('/settings'),get('/deployments'),
+            createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN}).snapshot()
+          ]);
+          if(!Array.isArray(settings?.bindings)||!d1.clean)throw Error('REMOTE_BINDINGS_OR_D1_NOT_VERIFIED');
+          for(const k of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
+            const b=settings.bindings.filter(x=>x?.name===k);
+            if(b.length!==1||b[0].type!=='plain_text'||b[0].text!=='false')
+              throw Error('SCRIPT_FLAG_STILL_NOT_FALSE_'+k);
+          }
+          const dep=deployment.deployments?.[0];
+          if(dep?.versions?.length!==1||dep.versions[0].percentage!==100||
+             dep.versions[0].version_id!=='18c379e8-e759-4b2f-8300-e7a4c8b39b83')
+            throw Error('SERVING_VERSION_CHANGED_UNEXPECTEDLY');
+          const url='https://'+worker+'.ikkinotako2.workers.dev';
+          const [home,ui,api,unsigned]=await Promise.all([
+            fetch(url,{signal:AbortSignal.timeout(12000)}),
+            fetch(url+'/command-center/swarm',{signal:AbortSignal.timeout(12000)}),
+            fetch(url+'/command-center/api/swarm/status',{signal:AbortSignal.timeout(12000)}),
+            fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)})
+          ]);
+          if(home.status!==200||ui.status!==503||api.status!==503||unsigned.status!==401)
+            throw Error('RUNTIME_NOT_HEALTHY_OR_SWARM_NOT_OFF');
+          console.log('SCRIPT_SHADOW_FLAGS_RECONCILED_ALL_FALSE');
+          console.log('ORIGINAL_DISCORD_PRODUCTION_VERSION_STILL_100_PERCENT');
+          console.log('D1_NO_ACTIVE_UNKNOWN_AND_DISCORD_AUTH_HEALTH_PASS');
+          console.log('NO_AI_INFERENCE_NO_D1_WRITE_NO_OTHER_PROJECTS');
+          NODE
