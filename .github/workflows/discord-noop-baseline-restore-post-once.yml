@@ -1,0 +1,149 @@
+name: Discord Baseline Same-Version Restore POST Exactly Once
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-noop-baseline-restore-post-once.yml']
+permissions: {contents: read}
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  no-op-restore:
+    if: ${{ github.event.head_commit.message == 'Execute ONE Discord baseline same-version restore POST with guarded rechecks' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      CF_WATCHDOG_READ: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: a8357494c7204c7d4939caddf902707430719713}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Guarded one-shot same-version Cloudflare restore, no code or flags change
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-disabled-release-gate-20261012'
+          test -n "$RESTORE_TOKEN"
+          test -n "$CF_WATCHDOG_READ"
+          test -n "$D1_READ_TOKEN"
+          node --test swarm/smoke-restore-executor.test.mjs swarm/smoke-watchdog.test.mjs >/dev/null
+          node --input-type=module <<'NODE'
+          import {createDiscordCloudflareClient} from './swarm/smoke-restore-executor.mjs';
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const primary='steep-glitter-b5cddiscord-ai-relay-lab';
+          const watchdog='discord-smoke-independent-watchdog-staged';
+          const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          const endpoint='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/';
+          const restorer=process.env.RESTORE_TOKEN;
+          const h=token=>({Authorization:'Bearer '+token});
+          async function get(name,suffix,token){
+            const r=await fetch(endpoint+name+suffix,{
+              method:'GET',headers:h(token),signal:AbortSignal.timeout(14000)});
+            if(r.status!==200)throw Error('CLOUDFLARE_SCOPE_READ_'+suffix+'_HTTP_'+r.status);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('CLOUDFLARE_BAD_RESPONSE');
+            return j.result;
+          }
+          const client=createDiscordCloudflareClient({token:restorer});
+          const reader=createDiscordD1ReadClient({token:process.env.D1_READ_TOKEN});
+          const [deployment,version,settings,watchSettings,watchSecrets,watchSchedules,firstJobs]=await Promise.all([
+            client.deployment(),client.bindings(baseline),
+            get(primary,'/settings',restorer),
+            get(watchdog,'/settings',process.env.CF_WATCHDOG_READ),
+            get(watchdog,'/secrets',process.env.CF_WATCHDOG_READ),
+            get(watchdog,'/schedules',process.env.CF_WATCHDOG_READ),
+            reader.snapshot()
+          ]);
+          if(deployment.versionId!==baseline||!Array.isArray(version)||
+             !Array.isArray(settings.bindings)||!Array.isArray(watchSettings.bindings)||
+             !Array.isArray(watchSecrets)||!Array.isArray(watchSchedules?.schedules)||
+             !firstJobs.clean)
+            throw Error('BASELINE_NOT_SAFE_NOOP_POST_FORBIDDEN');
+          const exact=(a,name)=>a.filter(b=>b?.name===name);
+          for(const k of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
+            const fromScript=exact(settings.bindings,k),fromVersion=exact(version,k);
+            if(fromScript.length!==1||fromScript[0].type!=='plain_text'||fromScript[0].text!=='false'||
+               fromVersion.length>1||fromVersion.some(b=>b.type!=='plain_text'||b.text!=='false'))
+              throw Error('SWARM_FLAG_NOT_OFF_'+k);
+          }
+          for(const [k,v] of [['WATCHDOG_ARMED','false'],['WATCHDOG_APPROVAL','NOT_APPROVED'],
+            ['WATCHDOG_BASELINE_VERSION','UNSET'],['WATCHDOG_SMOKE_VERSION','UNSET'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','UNSET'],['WATCHDOG_EXPIRES_AT','UNSET']]){
+            const m=exact(watchSettings.bindings,k);
+            if(m.length!==1||m[0].type!=='plain_text'||m[0].text!==v)
+              throw Error('WATCHDOG_NOT_PARKED_'+k);
+          }
+          for(const k of ['WATCHDOG_RESTORE_TOKEN','WATCHDOG_D1_READ_TOKEN'])
+            if(watchSecrets.filter(b=>b.name===k).length!==1)
+              throw Error('MISSING_WATCHDOG_SECRET_'+k);
+          if(watchSchedules.schedules.length!==1||watchSchedules.schedules[0].cron!=='* * * * *')
+            throw Error('WATCHDOG_CRON_NOT_ORIGINAL');
+          const url='https://'+primary+'.ikkinotako2.workers.dev/';
+          const checkPublic=async()=>{
+            const [root,post,ui,api]=await Promise.all([
+              fetch(url,{signal:AbortSignal.timeout(12000)}),
+              fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)}),
+              fetch(url+'command-center/swarm',{signal:AbortSignal.timeout(12000)}),
+              fetch(url+'command-center/api/swarm/status',{signal:AbortSignal.timeout(12000)})
+            ]);
+            if(root.status!==200||post.status!==401||ui.status!==503||api.status!==503 ||
+               (await root.text()).trim()!=='Discord GPT Relay gpt-oss command-center ready.')
+              throw Error('PUBLIC_DISCORD_HEALTH_OR_API_NOT_OFF');
+          };
+          await checkPublic();
+          // Negative control: scoped token cannot read or write the other Worker.
+          for(const suffix of ['/settings','/deployments']){
+            const r=await fetch(endpoint+watchdog+suffix,{
+              headers:h(restorer),signal:AbortSignal.timeout(12000)});
+            if(![401,403].includes(r.status))
+              throw Error('TOKEN_NOT_SCOPED_TO_PRIMARY_DISCORD_ONLY');
+          }
+          const immediatelyBefore=await client.deployment();
+          if(immediatelyBefore.versionId!==baseline||
+             immediatelyBefore.deploymentId!==deployment.deploymentId)
+            throw Error('CONCURRENT_DISCORD_DEPLOY_BEFORE_POST');
+          console.log('NOOP_RESTORE_PREFLIGHT_PASS_MAIN_CODE_OFF_JOB_ZERO');
+          // Exactly ONE real Cloudflare write, to the already serving identical safe
+          // version. We never switch the Worker to the six-role inference candidate.
+          let response;
+          try{
+            response=await fetch(endpoint+primary+'/deployments',{
+              method:'POST',headers:{...h(restorer),'Content-Type':'application/json'},
+              body:JSON.stringify({
+                strategy:'percentage',
+                versions:[{percentage:100,version_id:baseline}],
+                annotations:{'workers/message':'Discord baseline same-version scoped restore API proof exactly once'}
+              }),
+              signal:AbortSignal.timeout(15000)
+            });
+          }catch{throw Error('NOOP_RESTORE_POST_OUTCOME_UNCERTAIN_DO_NOT_RETRY');}
+          const data=await response.json().catch(()=>null);
+          if(response.status<200||response.status>=300||
+             data?.success!==true||!/^[0-9a-f-]{36}$/.test(data?.result?.id||''))
+            throw Error('NOOP_RESTORE_POST_UNVERIFIED_DO_NOT_RETRY');
+          const expectedId=data.result.id;
+          let after;
+          for(let i=0;i<5;i++){
+            after=await client.deployment();
+            if(after.versionId===baseline&&after.deploymentId===expectedId)break;
+            await new Promise(resolve=>setTimeout(resolve,1200));
+          }
+          if(after?.versionId!==baseline||after.deploymentId!==expectedId)
+            throw Error('NOOP_RESTORE_DEPLOYMENT_RECEIPT_MISMATCH_NO_RETRY');
+          const [jobs,settingsAfter]=await Promise.all([reader.snapshot(),get(primary,'/settings',restorer)]);
+          if(!jobs.clean)throw Error('NOOP_RESTORE_D1_NOT_CLEAN');
+          for(const k of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
+            const rows=exact(settingsAfter.bindings,k);
+            if(rows.length!==1||rows[0].type!=='plain_text'||rows[0].text!=='false')
+              throw Error('NOOP_RESTORE_SHADOW_FLAG_CHANGED_'+k);
+          }
+          await checkPublic();
+          console.log('CLOUDFLARE_NARROW_TOKEN_ACTUAL_DEPLOYMENT_POST_SUCCESS');
+          console.log('NOOP_RESTORE_RECEIPT_AND_LIVE_100_PERCENT_BASELINE_VERIFIED');
+          console.log('AFTER_POST_DISCORD_HEALTH_401_503_AND_D1_ZERO_PASS');
+          console.log('ONE_SAME_VERSION_DEPLOYMENT_POST_ZERO_AI_CALLS_ZERO_OTHER_WORKER_WRITES');
+          NODE
