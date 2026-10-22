@@ -1,0 +1,55 @@
+name: Discord Owner OAuth Entry Gate Readiness (READ ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-oauth-entry-readiness-readonly.yml']
+permissions: {contents: read}
+jobs:
+  oauth-entry:
+    if: ${{ github.event.head_commit.message == 'Verify Discord owner OAuth authorization entry without account login' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify OAuth entry redirect and six-role hard OFF before launch
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const root='https://steep-glitter-b5cddiscord-ai-relay-lab.ikkinotako2.workers.dev';
+          async function read(path){
+            const r=await fetch(root+path,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(12000)});
+            const body=await r.text();if(body.length>50000)throw Error('UNBOUNDED_RESPONSE');
+            return {r,body};
+          }
+          const [login,home,swarm,api]=await Promise.all([
+            read('/command-center/login'),
+            read('/command-center'),
+            read('/command-center/swarm'),
+            read('/command-center/api/swarm/overview')
+          ]);
+          if(![302,303,307,308].includes(login.r.status))throw Error('LOGIN_DOES_NOT_REDIRECT');
+          const loc=login.r.headers.get('location');if(!loc)throw Error('OAUTH_REDIRECT_MISSING');
+          const u=new URL(loc,root);
+          if(u.hostname!=='discord.com'||u.pathname!=='/oauth2/authorize')
+            throw Error('OAUTH_PROVIDER_WRONG');
+          if(u.searchParams.get('response_type')!=='code'||!u.searchParams.get('state')||
+             !u.searchParams.get('client_id')||!u.searchParams.get('scope')?.split(' ').includes('identify'))
+            throw Error('OAUTH_STATE_SCOPE_OR_CLIENT_ID_MISSING');
+          const cb=new URL(u.searchParams.get('redirect_uri')||'',root);
+          if(cb.origin!==root||cb.pathname!=='/command-center/callback')
+            throw Error('OAUTH_CALLBACK_NOT_PINNED_TO_DISCORD_WORKER');
+          const stateCookie=login.r.headers.get('set-cookie');
+          if(!stateCookie||!stateCookie.includes('dc_oauth_state=')||
+             !/secure/i.test(stateCookie)||!/httponly/i.test(stateCookie)||
+             !/samesite=lax/i.test(stateCookie))
+            throw Error('OAUTH_STATE_COOKIE_INSECURE_OR_MISSING');
+          if(![302,303,307,308].includes(home.r.status)||
+             new URL(home.r.headers.get('location'),root).pathname!=='/command-center/login')
+            throw Error('UNAUTHENTICATED_OWNER_DASHBOARD_NOT_REDIRECTED');
+          if(swarm.r.status!==503||api.r.status!==503)
+            throw Error('SWARM_DID_NOT_FAIL_CLOSED_WHILE_OFF');
+          console.log('DISCORD_OAUTH_AUTHORIZE_REDIRECT_STATE_SCOPE_CALLBACK_COOKIE_PASS');
+          console.log('UNAUTHENTICATED_COMMAND_CENTER_REDIRECT_LOGIN_PASS');
+          console.log('SIX_ROLE_PORTAL_AND_API_DISABLED_WHILE_OFF_PASS');
+          console.log('OWNER_OAUTH_CALLBACK_NOT_PERFORMED_NOT_IMPERSONATED');
+          console.log('NO_D1_WRITE_NO_AI_NO_DEPLOY_NO_OTHER_PROJECT');
+          NODE
