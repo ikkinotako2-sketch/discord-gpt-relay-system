@@ -1,0 +1,249 @@
+name: Discord Watchdog Actual Durable Alarm (NO AI, NO TRAFFIC SWITCH)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-watchdog-real-alarm-no-ai-once.yml']
+permissions: {contents: read}
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  baseline-do-alarm:
+    if: ${{ github.event.head_commit.message == 'Run isolated Discord baseline alarm live once with guaranteed OFF cleanup' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      NARROW_RESTORE: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a8357494c7204c7d4939caddf902707430719713
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Fail closed on isolated production baseline and exact parked watchdog
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-disabled-release-gate-20261012'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$NARROW_RESTORE"
+          test -n "$DISCORD_D1_READ_TOKEN"
+          node --test swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs swarm/smoke-restore-executor.test.mjs >/dev/null
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/';
+          const primary='steep-glitter-b5cddiscord-ai-relay-lab',watch='discord-smoke-independent-watchdog-staged';
+          async function get(name,suffix,token){
+            const res=await fetch(root+name+suffix,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(14000)});
+            if(res.status!==200)throw Error('SCOPED_READ_DENIED_'+suffix+'_'+res.status);
+            const obj=await res.json();if(obj.success!==true||!obj.result)throw Error('SCOPED_READ_INVALID');
+            return obj.result;
+          }
+          const [deploy,settings,baseline,smoke,ws,sec,cron,d1]=await Promise.all([
+            get(primary,'/deployments',process.env.NARROW_RESTORE),
+            get(primary,'/settings',process.env.NARROW_RESTORE),
+            get(primary,'/versions/18c379e8-e759-4b2f-8300-e7a4c8b39b83',process.env.NARROW_RESTORE),
+            get(primary,'/versions/a796bf35-daf0-4bb5-9020-e6617a3de043',process.env.NARROW_RESTORE),
+            get(watch,'/settings',process.env.CLOUDFLARE_API_TOKEN),
+            get(watch,'/secrets',process.env.CLOUDFLARE_API_TOKEN),
+            get(watch,'/schedules',process.env.CLOUDFLARE_API_TOKEN),
+            createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN}).snapshot()
+          ]);
+          if(deploy.deployments?.[0]?.versions?.length!==1||
+            deploy.deployments[0].versions[0].version_id!=='18c379e8-e759-4b2f-8300-e7a4c8b39b83'||
+            deploy.deployments[0].versions[0].percentage!==100)throw Error('PRIMARY_NOT_BASELINE_100');
+          for(const item of [settings,baseline,smoke,ws]){
+            if(!Array.isArray(item===baseline||item===smoke?item?.resources?.bindings:item?.bindings))
+              throw Error('REQUIRED_BINDINGS_UNVERIFIED');
+          }
+          const bs=settings.bindings;const version=baseline.resources.bindings;const candidate=smoke.resources.bindings;
+          for(const name of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
+            for(const a of [bs,version]){
+              const rows=a.filter(x=>x.name===name);
+              if(rows.length>1||rows.some(x=>x.type!=='plain_text'||x.text!=='false'))
+                throw Error('PRIMARY_NOT_SAFE_'+name);
+            }
+            const rows=candidate.filter(x=>x.name===name);
+            if(rows.length!==1||rows[0].type!=='plain_text'||rows[0].text!=='true')
+              throw Error('CANDIDATE_NOT_PINNED_'+name);
+          }
+          const oldExpiry=candidate.find(x=>x.name==='SWARM_SMOKE_EXPIRES_AT')?.text;
+          if(!/^[0-9]{13}$/.test(oldExpiry||'')||Number(oldExpiry)>=Date.now()-180000)
+            throw Error('CANDIDATE_MUST_BE_STALE_AND_NONSERVING');
+          const opts=[['WATCHDOG_ARMED','false'],['WATCHDOG_APPROVAL','NOT_APPROVED'],
+            ['WATCHDOG_BASELINE_VERSION','UNSET'],['WATCHDOG_SMOKE_VERSION','UNSET'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','UNSET'],['WATCHDOG_EXPIRES_AT','UNSET']];
+          for(const [k,v] of opts){
+            const rows=ws.bindings.filter(x=>x.name===k);
+            if(rows.length!==1||rows[0].type!=='plain_text'||rows[0].text!==v)
+              throw Error('WATCHDOG_NOT_PARKED_'+k);
+          }
+          for(const key of ['WATCHDOG_D1_READ_TOKEN','WATCHDOG_RESTORE_TOKEN'])
+            if(!Array.isArray(sec)||sec.filter(x=>x.name===key).length!==1)
+              throw Error('WATCHDOG_SCOPED_SECRET_MISSING_'+key);
+          if(cron?.schedules?.length!==1||cron.schedules[0].cron!=='* * * * *'||!d1.clean)
+            throw Error('CRON_OR_D1_NOT_SAFE');
+          const url='https://'+primary+'.ikkinotako2.workers.dev/';
+          const [health,signature,route]=await Promise.all([
+            fetch(url,{signal:AbortSignal.timeout(12000)}),
+            fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)}),
+            fetch(url+'command-center/swarm',{signal:AbortSignal.timeout(12000)})
+          ]);
+          if(health.status!==200||signature.status!==401||route.status!==503)
+            throw Error('PRIMARY_NOT_HEALTHY_AND_OFF');
+          console.log('BASELINE_STABLE_D1_ZERO_WATCHDOG_PARKED_PRIOR_TO_ALARM_TEST');
+          console.log('OUTDATED_CANDIDATE_IS_NON_SERVING_AND_NOT_FOR_INFERENCE');
+          NODE
+      - name: Time-limited isolated DO alarm with unconditional Watchdog OFF restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAIL_PID=""
+          RESTORE_CHECK="FAIL"
+          OFF_CONFIG="swarm/wrangler.watchdog.example.toml"
+          TARGET_CONFIG="swarm/wrangler.watchdog.baseline-test-once.toml"
+          restore_parked() {
+            local original_code="$1"
+            trap - EXIT
+            set +e
+            if [ -n "$TAIL_PID" ]; then kill "$TAIL_PID" 2>/dev/null; fi
+            if [ -f "$TARGET_CONFIG" ]; then
+              npx --yes wrangler@4.119.0 deploy --keep-vars --config "$OFF_CONFIG" >/tmp/watchdog-restore-output.txt 2>&1
+              RESTORE_CHECK="$?"
+              echo "WATCHDOG_PARKED_REDEPLOY_EXIT_CODE=$RESTORE_CHECK"
+            fi
+            node --input-type=module <<'NODE'
+          const base='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          async function get(w,s) {
+            const r=await fetch(base+w+s,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(14000)});
+            if(r.status!==200)throw Error('CLEANUP_REMOTE_UNVERIFIED_'+s+'_'+r.status);
+            const x=await r.json();if(x.success!==true||!x.result)throw Error('CLEANUP_RESULT_INVALID');
+            return x.result;
+          }
+          const watch='discord-smoke-independent-watchdog-staged',primary='steep-glitter-b5cddiscord-ai-relay-lab';
+          const [settings,secrets,cron,dep,pSettings]=await Promise.all([
+            get(watch,'/settings'),get(watch,'/secrets'),get(watch,'/schedules'),
+            get(primary,'/deployments'),get(primary,'/settings')]);
+          if(!Array.isArray(settings.bindings)||!Array.isArray(secrets)||
+            !Array.isArray(cron?.schedules))throw Error('CLEANUP_METADATA_INVALID');
+          for(const [k,v] of [['WATCHDOG_ARMED','false'],['WATCHDOG_APPROVAL','NOT_APPROVED'],
+            ['WATCHDOG_BASELINE_VERSION','UNSET'],['WATCHDOG_SMOKE_VERSION','UNSET'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','UNSET'],['WATCHDOG_EXPIRES_AT','UNSET']]){
+            const found=settings.bindings.filter(x=>x.name===k);
+            if(found.length!==1||found[0].type!=='plain_text'||found[0].text!==v)
+              throw Error('WATCHDOG_UNSAFE_LEFT_ON_'+k);
+          }
+          for(const k of ['WATCHDOG_RESTORE_TOKEN','WATCHDOG_D1_READ_TOKEN'])
+            if(secrets.filter(x=>x.name===k).length!==1)throw Error('WATCHDOG_SECRET_MISSING_'+k);
+          if(cron.schedules.length!==1||cron.schedules[0].cron!=='* * * * *')
+            throw Error('WATCHDOG_SCHEDULE_CHANGED');
+          if(dep.deployments?.[0]?.versions?.length!==1||
+             dep.deployments[0].versions[0].version_id!=='18c379e8-e759-4b2f-8300-e7a4c8b39b83'||
+             dep.deployments[0].versions[0].percentage!==100)
+            throw Error('PRIMARY_DISCORD_LIVE_TRAFFIC_CHANGED');
+          for(const k of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
+            const rows=pSettings?.bindings?.filter(x=>x.name===k);
+            if(!Array.isArray(rows)||rows.length!==1||rows[0].text!=='false')
+              throw Error('PRIMARY_SCRIPT_SHADOW_NOT_OFF_'+k);
+          }
+          console.log('ACTUAL_REMOTE_WATCHDOG_PARKED_AGAIN_ALL_PINS_UNSET');
+          console.log('LIVE_PRIMARY_BASELINE_STILL_100_AND_FOUR_FLAGS_OFF');
+          NODE
+            local postcheck="$?"
+            if [ "$original_code" -ne 0 ] || [ "$RESTORE_CHECK" != "0" ] || [ "$postcheck" -ne 0 ]; then exit 1; fi
+            exit 0
+          }
+          trap 'restore_parked "$?"' EXIT
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          let t=fs.readFileSync('swarm/wrangler.watchdog.example.toml','utf8');
+          const expiry=Date.now()+4*60*1000;
+          const substitutions=[
+            ['WATCHDOG_ARMED = "false"','WATCHDOG_ARMED = "EXPLICIT_DISCORD_SMOKE_RESTORE_ONCE"'],
+            ['WATCHDOG_APPROVAL = "NOT_APPROVED"','WATCHDOG_APPROVAL = "RESTORE-DISCORD-SMOKE-BASELINE-ONCE"'],
+            ['WATCHDOG_BASELINE_VERSION = "UNSET"','WATCHDOG_BASELINE_VERSION = "18c379e8-e759-4b2f-8300-e7a4c8b39b83"'],
+            ['WATCHDOG_SMOKE_VERSION = "UNSET"','WATCHDOG_SMOKE_VERSION = "a796bf35-daf0-4bb5-9020-e6617a3de043"'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID = "UNSET"','WATCHDOG_EXPECTED_DEPLOYMENT_ID = "PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT"'],
+            ['WATCHDOG_EXPIRES_AT = "UNSET"','WATCHDOG_EXPIRES_AT = "'+expiry+'"']
+          ];
+          for(const [oldText,newText] of substitutions){
+            if(t.split(oldText).length!==2)throw Error('UNEXPECTED_WATCHDOG_TEMPLATE_'+oldText);
+            t=t.replace(oldText,newText);
+          }
+          if(!t.includes('workers_dev = false')||!t.includes('crons = ["* * * * *"]')||
+            !t.includes('name = "discord-smoke-independent-watchdog-staged"'))
+            throw Error('WRONG_WATCHDOG_TARGET');
+          fs.writeFileSync('swarm/wrangler.watchdog.baseline-test-once.toml',t,{flag:'wx',mode:0o600});
+          fs.writeFileSync('/tmp/watchdog-deadline',''+expiry);
+          console.log('WATCHDOG_PARKED_BASELINE_ALARM_TEST_WINDOW_OPENED');
+          NODE
+          npx --yes wrangler@4.119.0 deploy --dry-run --config "$TARGET_CONFIG" --outdir /tmp/watchdog-alarm-compile >/dev/null
+          npx --yes wrangler@4.119.0 tail --config "$OFF_CONFIG" --format json > /tmp/watchdog-tail.jsonl 2>/tmp/watchdog-tail-errors.log &
+          TAIL_PID="$!"
+          sleep 8
+          if ! kill -0 "$TAIL_PID" 2>/dev/null; then
+            echo 'CANNOT_OBSERVE_WORKER_LIVE_TAIL_SKIP_ARM'
+            exit 1
+          fi
+          npx --yes wrangler@4.119.0 deploy --keep-vars --config "$TARGET_CONFIG" >/tmp/watchdog-arm-deploy.log 2>&1
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const end=fs.readFileSync('/tmp/watchdog-deadline','utf8');
+          const u='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/discord-smoke-independent-watchdog-staged/settings';
+          const r=await fetch(u,{headers:{Authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN},signal:AbortSignal.timeout(14000)});
+          if(r.status!==200)throw Error('ARM_REMOTE_NOT_FOUND');
+          const j=await r.json();const bs=j.result?.bindings;
+          if(j.success!==true||!Array.isArray(bs))throw Error('ARM_SETTINGS_INVALID');
+          for(const [k,v] of [
+            ['WATCHDOG_ARMED','EXPLICIT_DISCORD_SMOKE_RESTORE_ONCE'],
+            ['WATCHDOG_APPROVAL','RESTORE-DISCORD-SMOKE-BASELINE-ONCE'],
+            ['WATCHDOG_BASELINE_VERSION','18c379e8-e759-4b2f-8300-e7a4c8b39b83'],
+            ['WATCHDOG_SMOKE_VERSION','a796bf35-daf0-4bb5-9020-e6617a3de043'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT'],
+            ['WATCHDOG_EXPIRES_AT',end]
+          ]) {
+            const x=bs.filter(b=>b?.name===k);
+            if(x.length!==1||x[0].type!=='plain_text'||x[0].text!==v)
+              throw Error('WATCHDOG_ARMED_READBACK_FAILED_'+k);
+          }
+          console.log('WATCHDOG_REMOTE_ARMED_TARGET_PINNED_AND_ALARM_DEADLINE_VERIFIED');
+          NODE
+          # A real Cron must persist a DO alarm, and that DO must fire.
+          # No AI task, no primary Worker deploy, no D1 write; baseline stays serving.
+          success=0
+          for i in $(seq 1 38); do
+            if node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('/tmp/watchdog-tail.jsonl','utf8').split('\n');
+          let cronArm=false,alarmFire=false;
+          for(const line of s){
+            if(!line.trim())continue;
+            try{
+              const event=JSON.parse(line);
+              for(const l of event?.logs??[]) {
+                const msgs=Array.isArray(l?.message)?l.message:[l?.message];
+                for(const msg of msgs){
+                  if(typeof msg!=='string')continue;
+                  let x;try{x=JSON.parse(msg);}catch{continue;}
+                  if(x?.component==='discord_smoke_watchdog'&&x.alarm==='ARMED')cronArm=true;
+                  if(x?.component==='discord_smoke_alarm'&&x.status==='OFF_VERIFIED')alarmFire=true;
+                }
+              }
+            }catch{}
+          }
+          if(cronArm&&alarmFire){console.log('REAL_CRON_ARMED_AND_REAL_DO_ALARM_FIRED_OFF_VERIFIED');process.exit(0);}
+          process.exit(1);
+          NODE
+            then success=1; break; fi
+            sleep 12
+          done
+          if [ "$success" != "1" ]; then
+            echo 'REAL_ALARM_DELIVERY_NOT_PROVEN_KEEPING_PRIMARY_OFF'
+            exit 1
+          fi
+          echo 'WATCHDOG_BASELINE_ALARM_PROOF_PASS; RESTORING_PARKED_IN_TRAP'
