@@ -1,0 +1,104 @@
+name: Discord Six-role Live Readiness (READ ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-six-role-live-readiness-once.yml']
+permissions:
+  contents: read
+concurrency:
+  group: discord-six-role-readiness-only
+  cancel-in-progress: false
+jobs:
+  assess:
+    if: ${{ github.event.head_commit.message == 'Inspect Discord live smoke prerequisites read only once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WATCHDOG_RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Exact Discord-only read-only smoke feasibility survey
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-disabled-release-gate-20261012'
+          test -n "$WATCHDOG_RESTORE_TOKEN"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$DISCORD_D1_READ_TOKEN"
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const name='steep-glitter-b5cddiscord-ai-relay-lab';
+          const watch='discord-smoke-independent-watchdog-staged';
+          const base='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/';
+          const narrow=process.env.WATCHDOG_RESTORE_TOKEN;
+          const broad=process.env.CLOUDFLARE_API_TOKEN;
+          async function get(url,token){
+            const res=await fetch(url,{method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+            if(res.status!==200)throw Error('READ_HTTP_'+res.status+'_'+url.split('/').slice(-1)[0]);
+            const body=await res.json();
+            if(body?.success!==true||body.result===undefined)throw Error('READ_RESULT_UNVERIFIED');
+            return body.result;
+          }
+          const [ds,settings,versions,watchSettings,watchSecrets,watchSchedules,d1]=await Promise.all([
+            get(base+name+'/deployments',narrow),
+            get(base+name+'/settings',narrow),
+            get(base+name+'/versions',narrow),
+            get(base+watch+'/settings',broad),
+            get(base+watch+'/secrets',broad),
+            get(base+watch+'/schedules',broad),
+            createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN}).snapshot()
+          ]);
+          if(!Array.isArray(ds?.deployments)||ds.deployments.length===0)throw Error('PRIMARY_DEPLOYMENT_UNVERIFIED');
+          const live=ds.deployments[0],weights=live.versions;
+          if(!Array.isArray(weights)||weights.length!==1||weights[0].percentage!==100)throw Error('PRIMARY_TRAFFIC_SPLIT');
+          const active=weights[0].version_id;
+          const flags=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          function oneBinding(bs,k,v){
+            const matches=bs.filter(b=>b?.name===k);
+            return matches.length===1&&matches[0].type==='plain_text'&&matches[0].text===v;
+          }
+          if(!Array.isArray(settings?.bindings)||!Array.isArray(watchSettings?.bindings)||!Array.isArray(watchSecrets))
+            throw Error('SETTINGS_UNVERIFIED');
+          const safe=flags.every(k=>settings.bindings.filter(b=>b?.name===k).every(b=>b.type==='plain_text'&&b.text==='false') &&
+            settings.bindings.filter(b=>b?.name===k).length<=1);
+          if(!safe)throw Error('PRIMARY_SWARM_FLAGS_NOT_OFF');
+          if(!d1.clean)throw Error('DISCORD_D1_NONZERO_UNKNOWN');
+          if(!oneBinding(watchSettings.bindings,'WATCHDOG_ARMED','false')||
+             !oneBinding(watchSettings.bindings,'WATCHDOG_APPROVAL','NOT_APPROVED'))
+            throw Error('WATCHDOG_UNEXPECTEDLY_ARMED');
+          if(!Array.isArray(watchSchedules?.schedules)||
+             watchSchedules.schedules.length!==1||watchSchedules.schedules[0].cron!=='* * * * *')
+            throw Error('WATCHDOG_CRON_UNVERIFIED');
+          for(const secret of ['WATCHDOG_RESTORE_TOKEN','WATCHDOG_D1_READ_TOKEN'])
+            if(watchSecrets.filter(s=>s.name===secret).length!==1)throw Error('WATCHDOG_SCOPED_SECRET_MISSING');
+          if(!versions||!Array.isArray(versions.items??versions.versions))
+            console.log('VERSION_CATALOG_SHAPE=UNVERIFIED');
+          else {
+            const items=versions.items??versions.versions;
+            console.log('VERSION_CATALOG_ROWS='+items.length);
+            console.log('STAGED_VERSION_NOT_PROVEN_BY_SUMMARY');
+          }
+          const current=await get(base+name+'/versions/'+active,narrow);
+          if(current.id!==active||!Array.isArray(current.resources?.bindings))throw Error('CURRENT_VERSION_UNVERIFIED');
+          for(const key of flags){
+            const matches=current.resources.bindings.filter(b=>b?.name===key);
+            if(matches.length>1||(matches.length===1&&(matches[0].type!=='plain_text'||matches[0].text!=='false')))
+              throw Error('CURRENT_VERSION_FLAG_UNSAFE_'+key);
+          }
+          console.log('CURRENT_PRODUCTION_VERSION='+active);
+          console.log('CURRENT_PRODUCTION_DEPLOYMENT='+live.id);
+          console.log('WATCHDOG_BASELINE_PIN='+watchSettings.bindings.find(b=>b.name==='WATCHDOG_BASELINE_VERSION')?.text);
+          console.log('WATCHDOG_SMOKE_PIN='+watchSettings.bindings.find(b=>b.name==='WATCHDOG_SMOKE_VERSION')?.text);
+          console.log('WATCHDOG_DEPLOYMENT_PIN='+watchSettings.bindings.find(b=>b.name==='WATCHDOG_EXPECTED_DEPLOYMENT_ID')?.text);
+          console.log('WATCHDOG_EXPIRY_PIN='+watchSettings.bindings.find(b=>b.name==='WATCHDOG_EXPIRES_AT')?.text);
+          console.log('PRIMARY_LIVE_FLAGS_OFF_AND_D1_CLEAN_PASS');
+          console.log('RESTORER_SCOPED_SECRETS_PRESENT_PARKED_CRON_CONFIRMED');
+          console.log('AI_INFERENCE_TEST=NOT_EXECUTED');
+          console.log('REAL_ROLLBACK_TEST=NOT_EXECUTED');
+          console.log('NO_WORKER_DEPLOY_NO_D1_WRITE_NO_INFERENCE_NO_OTHER_PROJECTS');
+          NODE
