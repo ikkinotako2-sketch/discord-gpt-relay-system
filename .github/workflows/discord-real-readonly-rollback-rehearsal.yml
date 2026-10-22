@@ -1,0 +1,81 @@
+name: Discord Baseline Already-OFF Rehearsal (GET ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-real-readonly-rollback-rehearsal.yml']
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  protected-readonly:
+    if: ${{ github.event.head_commit.message == 'Run Discord baseline ALREADY_OFF rehearsal using GET only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '1e8edfdb887e23fc9e90e43425a53fee2cab6a0d' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Run restore baseline safety logic with Cloudflare GETs, never POST deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-disabled-release-gate-20261012'
+          node --test swarm/smoke-restore-executor.test.mjs swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs >/dev/null
+          node --input-type=module <<'NODE'
+          import {createDiscordCloudflareClient,restoreDiscordSmoke} from './swarm/smoke-restore-executor.mjs';
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          import {inspectPostRestore} from './swarm/smoke-watchdog-core.mjs';
+          import {FLAGS} from './swarm/smoke-restore-guard.mjs';
+          const baselineVersion='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          const smokeVersion='a796bf35-daf0-4bb5-9020-e6617a3de043';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const name='steep-glitter-b5cddiscord-ai-relay-lab';
+          const key=process.env.RESTORE_TOKEN;
+          const now=Date.now();
+          const original=createDiscordCloudflareClient({token:key});
+          const before=await original.deployment();
+          if(before.versionId!==baselineVersion)throw Error('LIVE_WORKER_NO_LONGER_BASELINE');
+          const smokeBindings=await original.bindings(smokeVersion);
+          const expiryFields=smokeBindings.filter(b=>b?.name==='SWARM_SMOKE_EXPIRES_AT');
+          if(expiryFields.length!==1||!/[0-9]{13}/.test(expiryFields[0].text||''))
+            throw Error('CANDIDATE_EXPIRY_UNKNOWN');
+          const expiryMs=Number(expiryFields[0].text);
+          if(now<expiryMs-20*60*1000||now>expiryMs+20*60*1000)
+            throw Error('CANDIDATE_EXPIRED_RESTORE_WINDOW_DO_NOT_REPLAY');
+          const forbidden={...original,
+            restore:async()=>{throw Error('PRODUCTION_POST_FORBIDDEN_BY_READONLY_REHEARSAL');}
+          };
+          // The adapter's control flow must recognize the already-OFF baseline.
+          // No deployment POST is reachable: restore() is an unconditionally throwing stub.
+          const result=await restoreDiscordSmoke({
+            client:forbidden,baselineVersion,smokeVersion,
+            expectedDeploymentId:before.deploymentId,expiryMs,nowMs:now,
+            execute:true,approval:'RESTORE-DISCORD-SMOKE-BASELINE-ONCE'
+          });
+          if(result.status!=='ALREADY_OFF')throw Error('BASELINE_NOT_ALREADY_OFF');
+          const reader=createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN});
+          const verified=await inspectPostRestore(original,reader,baselineVersion);
+          if(verified.status!=='OFF_VERIFIED')throw Error('POST_READ_STATE_NOT_VERIFIED');
+          const after=await original.deployment();
+          if(after.versionId!==baselineVersion||after.deploymentId!==before.deploymentId)
+            throw Error('CONCURRENT_LIVE_DEPLOYMENT_CHANGED');
+          const url='https://'+name+'.ikkinotako2.workers.dev/';
+          const [health,unauthorized]=await Promise.all([
+            fetch(url,{signal:AbortSignal.timeout(12000)}),
+            fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)})
+          ]);
+          if(health.status!==200||unauthorized.status!==401)
+            throw Error('PRODUCTION_AUTH_OR_HEALTH_FAILED');
+          console.log('PRODUCTION_ALREADY_OFF_REHEARSAL_PASS');
+          console.log('BASELINE='+baselineVersion);
+          console.log('DISCORD_D1_ZERO_ACTIVE_UNKNOWN_CONFIRMED');
+          console.log('ACTUAL_RESTORE_POSTS=ZERO_BY_CONSTRUCTION');
+          console.log('THIS_DOES_NOT_PROVE_REAL_RESTORE_POST_OR_ALARM_DELIVERY');
+          NODE
