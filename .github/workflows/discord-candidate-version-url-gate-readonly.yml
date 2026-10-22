@@ -1,0 +1,47 @@
+name: Discord Inactive Version URL Auth Gate (READ ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-candidate-version-url-gate-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  unauthenticated-test:
+    if: ${{ github.event.head_commit.message == 'Audit Discord inactive version URL without inference once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect an unauthenticated GET-only version URL, never schedule work
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const domain='ikkinotako2.workers.dev';
+          const worker='steep-glitter-b5cddiscord-ai-relay-lab';
+          const candidate='a796bf35-'+worker+'.'+domain;
+          const production=worker+'.'+domain;
+          async function check(host,path){
+            const response=await fetch('https://'+host+path,{
+              method:'GET',redirect:'manual',
+              signal:AbortSignal.timeout(12000),
+              headers:{'Accept':'application/json'}
+            });
+            const raw=await response.text();
+            if(raw.length>50000)throw Error('UNBOUNDED_RESPONSE');
+            return {status:response.status,body:raw};
+          }
+          const safePaths=['/command-center/swarm','/command-center/api/swarm/status'];
+          const authLeak=/\\"(?:csrf|access_token|refresh_token|cookieKey|DISCORD_OAUTH_CLIENT_SECRET)\\"\s*:/i;
+          for(const path of safePaths){
+            const r=await check(candidate,path);
+            console.log('NON_SERVING_VERSION_'+(path.includes('/api/')?'API':'PORTAL')+'_STATUS='+r.status);
+            if(r.status===200||authLeak.test(r.body))throw Error('UNAUTHENTICATED_VERSION_URL_EXPOSES_SWARM_DATA');
+            if(![301,302,303,307,308,401,403,404,503].includes(r.status))
+              throw Error('UNEXPECTED_INACTIVE_VERSION_RESPONSE');
+          }
+          const live=await check(production,'/command-center/swarm');
+          if(live.status!==503)throw Error('PRIMARY_PORTAL_UNEXPECTEDLY_ENABLED');
+          console.log('INACTIVE_CANDIDATE_OWNER_GATE_REJECTS_UNAUTHENTICATED_GET');
+          console.log('PRIMARY_PRODUCTION_STILL_DISABLED_503');
+          console.log('NO_INFERENCE_NO_D1_WRITE_NO_DEPLOY_NO_SECRET');
+          NODE
