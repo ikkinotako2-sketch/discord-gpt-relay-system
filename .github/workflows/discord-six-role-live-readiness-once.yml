@@ -114,6 +114,13 @@ jobs:
           console.log('WATCHDOG_SMOKE_PIN='+watchSettings.bindings.find(b=>b.name==='WATCHDOG_SMOKE_VERSION')?.text);
           console.log('WATCHDOG_DEPLOYMENT_PIN='+watchSettings.bindings.find(b=>b.name==='WATCHDOG_EXPECTED_DEPLOYMENT_ID')?.text);
           console.log('WATCHDOG_EXPIRY_PIN='+watchSettings.bindings.find(b=>b.name==='WATCHDOG_EXPIRES_AT')?.text);
+          // Public 6-role API must fail closed while four SWARM flags remain OFF.
+          const publicRoot='https://'+name+'.ikkinotako2.workers.dev';
+          for(const route of ['/command-center/swarm','/command-center/api/swarm/status']){
+            const res=await fetch(publicRoot+route,{method:'GET',signal:AbortSignal.timeout(12000)});
+            if(res.status!==503)throw Error('SWARM_ROUTE_NOT_SAFELY_DISABLED_'+route+'_HTTP_'+res.status);
+          }
+          console.log('SWARM_PUBLIC_PORTAL_AND_API_DISABLED_503_PASS');
           console.log('PRIMARY_LIVE_FLAGS_OFF_AND_D1_CLEAN_PASS');
           console.log('RESTORER_SCOPED_SECRETS_PRESENT_PARKED_CRON_CONFIRMED');
           console.log('AI_INFERENCE_TEST=NOT_EXECUTED');
