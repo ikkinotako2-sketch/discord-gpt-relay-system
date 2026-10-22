@@ -1,0 +1,183 @@
+name: Discord Six-role Temporary VERSION Upload Only (NO DEPLOY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths:
+      - '.github/workflows/discord-six-role-isolated-version-upload-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  nonserving-version-only:
+    if: ${{ github.event.head_commit.message == 'Authorize Discord six-role NONSERVING version upload once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      ACCOUNT_ID: 6c8ccd6aface937ab5dabef61cb64534
+      WORKER: steep-glitter-b5cddiscord-ai-relay-lab
+      BASELINE_VERSION: 18c379e8-e759-4b2f-8300-e7a4c8b39b83
+      TARGET_D1: d80b08a4-0ff7-4320-9575-0d3c55cf7aba
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 1e8edfdb887e23fc9e90e43425a53fee2cab6a0d
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline tests and isolate config before any Cloudflare write
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_EVENT_NAME" = 'push'
+          test "$GITHUB_REF" = 'refs/heads/diagnostics/discord-swarm-disabled-release-gate-20261012'
+          test "$ACCOUNT_ID" = '6c8ccd6aface937ab5dabef61cb64534'
+          test "$WORKER" = 'steep-glitter-b5cddiscord-ai-relay-lab'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$DISCORD_D1_READ_TOKEN"
+          test ! -e ./wrangler.swarm-smoke-temporary.toml
+          node --test swarm/bridge.test.mjs swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs swarm/smoke-restore-executor.test.mjs
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          import {DISCORD_SMOKE_TARGET,FLAGS} from './swarm/smoke-restore-guard.mjs';
+          const {accountId,worker,databaseId}=DISCORD_SMOKE_TARGET;
+          const u='https://api.cloudflare.com/client/v4/accounts/'+accountId+'/workers/scripts/'+worker;
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          const req=async url=>{
+            const r=await fetch(url,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('SCOPE_OR_REMOTE_READ_NOT_200_'+r.status);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('REMOTE_READ_FAILURE');
+            return j.result;
+          };
+          const [deployment,settings,version,d1]=await Promise.all([
+            req(u+'/deployments'),req(u+'/settings'),req(u+'/versions/'+process.env.BASELINE_VERSION),
+            createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN}).snapshot()
+          ]);
+          const current=deployment?.deployments?.[0];
+          if(current?.versions?.length!==1||current.versions[0].percentage!==100||
+             current.versions[0].version_id!==process.env.BASELINE_VERSION||
+             !Array.isArray(settings?.bindings)||!Array.isArray(version?.resources?.bindings))
+            throw Error('BASELINE_NOT_STABLE_OR_VERIFIED');
+          const secretNames=['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID',
+            'DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY'];
+          function verify(bs){
+            for(const key of FLAGS){
+              const matches=bs.filter(x=>x?.name===key);
+              if(matches.length>1 || matches.some(x=>x.type!=='plain_text'||x.text!=='false'))
+                throw Error('SWARM_ALREADY_ON_OR_UNVERIFIED');
+            }
+            for(const key of secretNames){
+              const matches=bs.filter(x=>x?.name===key);
+              if(matches.length!==1||matches[0].type!=='secret_text')
+                throw Error('DISCORD_SECRET_BINDING_NOT_PRESERVED');
+            }
+            const d=bs.filter(x=>x?.name==='LOOP_DB');
+            if(d.length!==1||d[0].type!=='d1'||d[0].database_id!==databaseId)
+              throw Error('DISCORD_D1_WRONG');
+            const ai=bs.filter(x=>x?.name==='AI');
+            if(ai.length!==1||ai[0].type!=='ai')throw Error('AI_BINDING_MISSING');
+          }
+          verify(settings.bindings);verify(version.resources.bindings);
+          if(!d1.clean)throw Error('D1_UNKNOWN_OR_ACTIVE');
+          const health=await fetch('https://'+worker+'.ikkinotako2.workers.dev/',{signal:AbortSignal.timeout(12000)});
+          const unauthorized=await fetch('https://'+worker+'.ikkinotako2.workers.dev/',{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)});
+          if(health.status!==200||unauthorized.status!==401||
+             (await health.text()).trim()!=='Discord GPT Relay gpt-oss command-center ready.')
+            throw Error('DISCORD_SIGNATURE_HEALTH_FAILED');
+          console.log('NONSERVING_UPLOAD_SAFE_BASELINE_D1_AND_SIGNATURE_PASS');
+          NODE
+      - name: Create single-use bounded six-role version configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p='wrangler.command-center.toml';
+          let t=fs.readFileSync(p,'utf8');
+          if(!t.includes('name = "steep-glitter-b5cddiscord-ai-relay-lab"')||
+             !t.includes('keep_vars = true')||
+             !t.includes('main = "worker-loop.mjs"')||
+             !t.includes('binding = "LOOP_DB"')||
+             !t.includes('database_id = "d80b08a4-0ff7-4320-9575-0d3c55cf7aba"')||
+             !t.includes('LOOP_AI_MODEL = "@cf/openai/gpt-oss-20b"')||
+             !t.includes('crons = ["*/1 * * * *"]'))throw Error('WRANGLER_BASE_CONFIG_CHANGED');
+          const expiry=Date.now()+19*60*1000;
+          if(!Number.isSafeInteger(expiry)||!/^\d{13}$/.test(String(expiry)))throw Error('BAD_EXPIRY');
+          // This config only supplies a NONSERVING version, never a traffic deployment.
+          const additions=[
+            'SWARM_API_ENABLED = "true"',
+            'SWARM_RUNNER_ENABLED = "true"',
+            'SWARM_EXECUTION_APPROVED = "true"',
+            'SWARM_EXCLUSIVE_MODE = "true"',
+            'SWARM_DAILY_CALL_CAP = "6"',
+            'SWARM_SMOKE_EXPIRES_AT = "'+expiry+'"'
+          ].join('\n');
+          if(['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED',
+             'SWARM_EXCLUSIVE_MODE','SWARM_DAILY_CALL_CAP','SWARM_SMOKE_EXPIRES_AT'].some(k=>t.includes(k+' = ')))
+            throw Error('SWARM_DUPLICATE_CONFIG');
+          t=t.replace('[vars]\n','[vars]\n'+additions+'\n');
+          if(!t.includes(additions))throw Error('TEMP_CONFIG_NOT_INSTALLED');
+          fs.writeFileSync('wrangler.swarm-smoke-temporary.toml',t,{flag:'wx',mode:0o600});
+          fs.writeFileSync('/tmp/discord-smoke-expiry.txt',String(expiry),{mode:0o600});
+          console.log('BOUNDED_NONSERVING_VERSION_CONFIG_PREPARED');
+          NODE
+          npx --yes wrangler@4.119.0 deploy --dry-run --config wrangler.swarm-smoke-temporary.toml --outdir /tmp/discord-six-role-compile
+          test -d /tmp/discord-six-role-compile
+      - name: Upload Worker VERSION ONLY without deploy or triggers
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.119.0 versions upload --strict --keep-vars --config wrangler.swarm-smoke-temporary.toml --message "Owner-approved Discord smoke nonserving six role cap6 only"
+      - name: Verify production remains unchanged and scoped candidate is nonserving
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {FLAGS,DISCORD_SMOKE_TARGET} from './swarm/smoke-restore-guard.mjs';
+          const {accountId,worker,databaseId}=DISCORD_SMOKE_TARGET;
+          const base='https://api.cloudflare.com/client/v4/accounts/'+accountId+'/workers/scripts/'+worker;
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          async function get(url){
+            const r=await fetch(url,{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('POSTCHECK_CLOUDFLARE_READ_'+r.status);
+            const data=await r.json();if(data.success!==true||!data.result)throw Error('POSTCHECK_READ_INVALID');
+            return data.result;
+          }
+          const [dep,versions]=await Promise.all([get(base+'/deployments'),get(base+'/versions')]);
+          const current=dep?.deployments?.[0];
+          if(current?.versions?.length!==1||current.versions[0].percentage!==100||
+             current.versions[0].version_id!==process.env.BASELINE_VERSION)
+            throw Error('PRIMARY_TRAFFIC_CHANGED_ABORT_AND_REVIEW');
+          const entries=versions?.items??versions?.versions;
+          if(!Array.isArray(entries)||entries.length>50)throw Error('VERSION_LIST_UNVERIFIED');
+          let candidates=[];
+          for(const item of entries.slice(0,15)){
+            if(!/^[0-9a-f-]{36}$/.test(item?.id||''))continue;
+            const v=await get(base+'/versions/'+item.id);
+            const bs=v?.resources?.bindings;
+            if(!Array.isArray(bs))throw Error('REMOTE_VERSION_BINDINGS_UNVERIFIED');
+            if(!FLAGS.every(k=>bs.filter(b=>b?.name===k).length===1&&
+              bs.find(b=>b.name===k)?.type==='plain_text'&&bs.find(b=>b.name===k).text==='true'))continue;
+            if(bs.filter(b=>b?.name==='SWARM_DAILY_CALL_CAP').length!==1 ||
+               bs.find(b=>b.name==='SWARM_DAILY_CALL_CAP')?.text!=='6')continue;
+            const expiry=bs.find(b=>b.name==='SWARM_SMOKE_EXPIRES_AT')?.text;
+            if(expiry!==String((await import('node:fs')).readFileSync('/tmp/discord-smoke-expiry.txt','utf8')))continue;
+            const d1=bs.filter(b=>b?.name==='LOOP_DB');
+            if(d1.length!==1||d1[0].type!=='d1'||d1[0].database_id!==databaseId)
+              throw Error('CANDIDATE_D1_WRONG');
+            for(const key of ['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID',
+              'DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY']){
+              const entry=bs.filter(b=>b?.name===key);
+              if(entry.length!==1||entry[0].type!=='secret_text')throw Error('CANDIDATE_SECRET_MISSING');
+            }
+            candidates.push(item.id);
+          }
+          if(candidates.length!==1)throw Error('NONSERVING_SMOKE_CANDIDATE_NOT_UNIQUE_OR_MISSING');
+          console.log('NONSERVING_CAP6_VERSION_VERIFIED='+candidates[0]);
+          console.log('ACTUAL_BASELINE_STILL_100_PERCENT_NO_DEPLOY');
+          console.log('NO_PRODUCTION_WRITE_NO_D1_WRITE_NO_MODEL_CALL');
+          NODE
