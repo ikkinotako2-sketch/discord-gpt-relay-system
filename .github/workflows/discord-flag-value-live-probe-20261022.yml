@@ -1,0 +1,49 @@
+name: Discord production flag truth GET ONLY
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-flag-value-live-probe-20261022.yml']
+permissions: {contents: read}
+jobs:
+  probe:
+    if: ${{ github.event.head_commit.message == 'Audit exact Discord production flag values GET once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: GET exact production flags and version without leaking other settings
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(!token)throw Error('MISSING_TOKEN');
+          async function get(path){
+            const r=await fetch(root+path,{method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('READ_HTTP_'+r.status);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('MALFORMED_API_RESPONSE');return j.result;
+          }
+          const [settings,deploy,watch]=await Promise.all([
+            get('steep-glitter-b5cddiscord-ai-relay-lab/settings'),
+            get('steep-glitter-b5cddiscord-ai-relay-lab/deployments'),
+            get('discord-smoke-independent-watchdog-staged/settings')
+          ]);
+          if(!Array.isArray(settings.bindings)||!Array.isArray(watch.bindings))throw Error('BINDINGS_MISSING');
+          const flags=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          for(const name of flags){
+            const found=settings.bindings.filter(x=>x?.name===name);
+            const safe=found.length===0?'ABSENT':found.length!==1?'DUPLICATE':
+              found[0].type!=='plain_text'?'NON_PLAINTEXT':
+              found[0].text==='false'?'FALSE':found[0].text==='true'?'TRUE':'OTHER';
+            console.log('DISCORD_FLAG_'+name+'='+safe);
+          }
+          for(const name of ['WATCHDOG_ARMED','WATCHDOG_APPROVAL']){
+            const found=watch.bindings.filter(x=>x?.name===name);
+            console.log(name+'='+((found.length===1&&found[0].type==='plain_text')
+              ?found[0].text:'MISSING_OR_AMBIGUOUS'));
+          }
+          console.log('DISCORD_PRIMARY_ACTIVE_VERSION='+(deploy.deployments?.[0]?.versions?.[0]?.version_id||'UNKNOWN'));
+          console.log('GET_ONLY_NO_SECRETS_NO_WRITE_NO_AI');
+          NODE
