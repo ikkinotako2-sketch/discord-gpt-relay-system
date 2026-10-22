@@ -253,3 +253,7 @@ and manual recovery procedure remain a blocker to live deployment.
 
 No Cloudflare production requests, version restores, tokens, D1 mutations,
 SWARM flag changes or inference are part of this PR update.
+
+## 2026-10-22 — prearm before deployment ID exists (OFFLINE CODE)
+
+When configured with WATCHDOG_EXPECTED_DEPLOYMENT_ID=PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT, the independent DO alarm can be persisted *before* Cloudflare assigns the future smoke deployment ID. At expiry, the one-shot Watchdog captures the current deployment ID only when the live version matches either the exact pinned baseline or the exact pinned smoke version. The restore executor still rereads the deployment twice before any POST and refuses other versions/split traffic. This reduces the unprotected gap but cannot provide atomic CAS on Cloudflare deployments. It DOES NOT approve or deploy a smoke, prove actual Cron/DO alarm delivery, or reserve Workers AI Neurons. All secrets, Worker variables, and production version remain untouched by this patch.

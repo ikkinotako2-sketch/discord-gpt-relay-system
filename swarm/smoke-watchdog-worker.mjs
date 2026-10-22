@@ -5,6 +5,7 @@ import {DISCORD_SMOKE_TARGET} from './smoke-restore-guard.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ARM='EXPLICIT_DISCORD_SMOKE_RESTORE_ONCE';
 const APPROVAL='RESTORE-DISCORD-SMOKE-BASELINE-ONCE';
+const PREARM='PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT';
 function exactTarget(env){
  return env?.WATCHDOG_ARMED===ARM && env?.WATCHDOG_APPROVAL===APPROVAL &&
   env.WATCHDOG_ACCOUNT_ID===DISCORD_SMOKE_TARGET.accountId &&
@@ -13,7 +14,8 @@ function exactTarget(env){
   uuid.test(env.WATCHDOG_BASELINE_VERSION||'') &&
   uuid.test(env.WATCHDOG_SMOKE_VERSION||'') &&
   env.WATCHDOG_BASELINE_VERSION!==env.WATCHDOG_SMOKE_VERSION &&
-  uuid.test(env.WATCHDOG_EXPECTED_DEPLOYMENT_ID||'');
+  (uuid.test(env.WATCHDOG_EXPECTED_DEPLOYMENT_ID||'')||
+   env.WATCHDOG_EXPECTED_DEPLOYMENT_ID===PREARM);
 }
 function validExpiry(env,now){
  const string=String(env?.WATCHDOG_EXPIRES_AT??'');
