@@ -69,7 +69,7 @@ jobs:
              exact(c,'SWARM_DAILY_CALL_CAP')[0].text!=='6')
              throw Error('SIX_CALL_CAP_UNVERIFIED');
           const expiry=exact(c,'SWARM_SMOKE_EXPIRES_AT');
-          if(expiry.length!==1||expiry[0].type!=='plain_text'||!/^\\d{13}$/.test(expiry[0].text))
+          if(expiry.length!==1||expiry[0].type!=='plain_text'||!/^[0-9]{13}$/.test(expiry[0].text))
              throw Error('CANDIDATE_EXPIRY_UNVERIFIED');
           for(const bs of [o,c]){
             const d1s=exact(bs,'LOOP_DB');
