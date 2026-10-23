@@ -87,3 +87,5 @@ jobs:
 # monitor second candidate owner task test after prearm
 
 # owner login complete, second smoke active: poll 1
+
+# post-owner login, 19 minute live experiment poll 2
