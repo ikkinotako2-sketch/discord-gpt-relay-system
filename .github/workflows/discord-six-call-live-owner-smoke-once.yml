@@ -1,0 +1,41 @@
+name: Discord Six-Role Owner OAuth Live Smoke MAX6 ONCE
+on:
+  push:
+    branches: [experiment/discord-six-role-live-smoke-20261023]
+    paths: ['.github/workflows/discord-six-call-live-owner-smoke-once.yml']
+permissions: { contents: read }
+concurrency:
+  group: discord-relay-production-deploy
+  cancel-in-progress: false
+jobs:
+  owner-six-role-smoke-once:
+    if: ${{ github.event.head_commit.message == 'Owner-approved execute guarded Discord six-call live smoke exactly once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 27
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WATCHDOG_RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cb9ae8fbea69868848479339565c29783fb4e5f1
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Confirm exact approved single-run scope and previous offline checks
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test "$GITHUB_REF" = 'refs/heads/experiment/discord-six-role-live-smoke-20261023'
+          test "$GITHUB_EVENT_NAME" = 'push'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$WATCHDOG_RESTORE_TOKEN"
+          test -n "$DISCORD_D1_READ_TOKEN"
+          node --check diagnostics/discord-six-role-live-controller.mjs
+          node --test swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs swarm/smoke-restore-executor.test.mjs swarm/bridge.test.mjs swarm/runner.test.mjs swarm/cron.test.mjs
+          echo 'MAX6_OWNER_OAUTH_REQUIRED; IF_NO_OWNER_TASK_AUTOMATIC_BASELINE_RESTORE_STILL_REQUIRED'
+      - name: Execute bounded live experiment with independent prearmed recovery and mandatory cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          node diagnostics/discord-six-role-live-controller.mjs
