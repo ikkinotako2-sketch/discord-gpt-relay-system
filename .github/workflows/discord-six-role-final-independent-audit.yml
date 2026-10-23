@@ -1,0 +1,100 @@
+name: Discord Six-role Final Independent Audit (GET ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-six-role-final-independent-audit.yml']
+permissions: {contents: read}
+jobs:
+  final-audit:
+    if: ${{ github.event.head_commit.message == 'Run final independent Discord six-call postcheck GET only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NARROW: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      BROAD: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_READ: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: a8357494c7204c7d4939caddf902707430719713}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify baseline, secure owner gate, parked independent fallback, actual D1 result
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient,DISCORD_D1_URL} from './swarm/smoke-watchdog-d1.mjs';
+          const base='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/';
+          const primary='steep-glitter-b5cddiscord-ai-relay-lab',watch='discord-smoke-independent-watchdog-staged';
+          const expected='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          async function get(w,s,token){
+            const res=await fetch(base+w+s,{method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(14000)});
+            if(res.status!==200)throw Error('CLOUDFLARE_GET_UNVERIFIED_'+s+'_'+res.status);
+            const j=await res.json();if(j.success!==true||!j.result)throw Error('CLOUDFLARE_RESPONSE_INVALID');return j.result;
+          }
+          const [dep,settings,ver,ws,secrets,cron,d1]=await Promise.all([
+            get(primary,'/deployments',process.env.NARROW),
+            get(primary,'/settings',process.env.NARROW),
+            get(primary,'/versions/'+expected,process.env.NARROW),
+            get(watch,'/settings',process.env.BROAD),
+            get(watch,'/secrets',process.env.BROAD),
+            get(watch,'/schedules',process.env.BROAD),
+            createDiscordD1ReadClient({token:process.env.D1_READ}).snapshot()
+          ]);
+          const a=dep?.deployments?.[0];
+          if(a?.versions?.length!==1||a.versions[0].version_id!==expected||a.versions[0].percentage!==100)
+            throw Error('LIVE_VERSION_NOT_BASELINE');
+          if(!Array.isArray(settings?.bindings)||!Array.isArray(ver?.resources?.bindings)||!Array.isArray(ws?.bindings))
+            throw Error('BAD_BINDING_RESPONSE');
+          const value=(bs,k)=>{
+            const t=bs.filter(x=>x.name===k);
+            return t.length===1&&t[0].type==='plain_text'?t[0].text:null;
+          };
+          for(const k of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE']){
+            if(value(settings.bindings,k)!=='false')throw Error('SCRIPT_FLAG_NOT_OFF_'+k);
+            const rows=ver.resources.bindings.filter(b=>b?.name===k);
+            if(rows.length>1||rows.some(b=>b.text!=='false'||b.type!=='plain_text'))
+              throw Error('BASELINE_VERSION_NOT_OFF_'+k);
+          }
+          for(const [k,v] of [['WATCHDOG_ARMED','false'],['WATCHDOG_APPROVAL','NOT_APPROVED'],
+            ['WATCHDOG_BASELINE_VERSION','UNSET'],['WATCHDOG_SMOKE_VERSION','UNSET'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','UNSET'],['WATCHDOG_EXPIRES_AT','UNSET']]){
+            if(value(ws.bindings,k)!==v)throw Error('WATCHDOG_STILL_ARMED_OR_UNEXPECTED_'+k);
+          }
+          if(!Array.isArray(secrets)||!Array.isArray(cron?.schedules)||
+             cron.schedules.length!==1||cron.schedules[0].cron!=='* * * * *')
+            throw Error('WATCHDOG_SECRETS_OR_CRON_UNVERIFIED');
+          for(const k of ['WATCHDOG_RESTORE_TOKEN','WATCHDOG_D1_READ_TOKEN']){
+            if(secrets.filter(s=>s.name===k).length!==1)throw Error('WATCHDOG_SECRET_MISSING_'+k);
+          }
+          const url='https://'+primary+'.ikkinotako2.workers.dev/';
+          const [home,unauth,swarm,api]=await Promise.all([
+            fetch(url,{signal:AbortSignal.timeout(14000)}),
+            fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(14000)}),
+            fetch(url+'command-center/swarm',{signal:AbortSignal.timeout(14000)}),
+            fetch(url+'command-center/api/swarm/overview',{signal:AbortSignal.timeout(14000)})
+          ]);
+          if(home.status!==200||unauth.status!==401||swarm.status!==503||api.status!==503)
+            throw Error('DISCORD_HEALTH_SIGNATURE_OR_OWNER_MODE_UNSAFE');
+          console.log('POST_SMOKE_BASELINE_100_PERCENT_SCRIPT_FOUR_OFF');
+          console.log('POST_SMOKE_WATCHDOG_PARKED_ALL_PINS_UNSET_CREDENTIALS_AND_CRON_VALID');
+          console.log('POST_SMOKE_PUBLIC_HEALTH_200_UNSIGNED_401_SWARM_503');
+          console.log('POST_SMOKE_D1_ACTIVE_ZERO_AND_UNKNOWN_ZERO='+d1.clean);
+          const select=async sql=>{
+            const r=await fetch(DISCORD_D1_URL,{method:'POST',headers:{Authorization:'Bearer '+process.env.D1_READ,'Content-Type':'application/json'},
+              body:JSON.stringify({sql}),signal:AbortSignal.timeout(14000)});
+            const j=await r.json();
+            if(!r.ok||j.success!==true||j.result?.[0]?.success!==true||!Array.isArray(j.result[0].results))
+              throw Error('D1_FINAL_READ_FAILED');
+            return j.result[0].results;
+          };
+          const dayStart=Date.parse('2026-10-23T02:40:00Z');
+          const recent=await select('SELECT status,calls_used,cycles,created_at FROM swarm_jobs WHERE created_at>='+dayStart+' ORDER BY created_at DESC LIMIT 4');
+          console.log('SIX_ROLE_JOB_RECORDS_IN_TEST_WINDOW='+recent.length);
+          for(const row of recent)console.log('JOB_TERMINAL_STATUS='+row.status+'_CALLS='+row.calls_used+'_CYCLES='+row.cycles);
+          const utcDay=new Date().toISOString().slice(0,10);
+          const budget=await select("SELECT COALESCE(SUM(reserved),0) AS reserved FROM swarm_budget_days WHERE utc_day='"+utcDay+"'");
+          console.log('SIX_ROLE_LOCAL_RESERVATIONS_UTC_DAY='+Number(budget[0]?.reserved??0));
+          console.log('SIX_ROLE_COMPLETED_6_OF_6='+recent.some(x=>x.status==='completed'&&x.calls_used===6&&x.cycles===1));
+          if(!d1.clean)throw Error('POST_SMOKE_D1_NOT_TERMINAL_OR_UNKNOWN');
+          console.log('INDEPENDENT_GET_AND_SELECT_ONLY_AUDIT_PASS');
+          NODE
