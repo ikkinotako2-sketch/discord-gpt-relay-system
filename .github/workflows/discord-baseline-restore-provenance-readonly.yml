@@ -1,0 +1,38 @@
+name: Discord Restoration Provenance GET ONLY
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-baseline-restore-provenance-readonly.yml']
+permissions: {contents: read}
+jobs:
+  audit-deployment-receipt:
+    if: ${{ github.event.head_commit.message == 'Read-only Discord real restoration deployment receipt once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NARROW: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+    steps:
+      - name: Verify exact known Discord deployment provenance without exposing credentials
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const root='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/steep-glitter-b5cddiscord-ai-relay-lab';
+          const r=await fetch(root+'/deployments',{method:'GET',headers:{Authorization:'Bearer '+process.env.NARROW},signal:AbortSignal.timeout(14000)});
+          if(r.status!==200)throw Error('DEPLOYMENT_READ_DENIED');
+          const j=await r.json(),a=j.result?.deployments;
+          if(j.success!==true||!Array.isArray(a)||a.length<1)throw Error('DEPLOYMENT_LIST_UNVERIFIED');
+          const current=a[0];
+          if(current.versions?.length!==1||current.versions[0].percentage!==100||
+             current.versions[0].version_id!=='18c379e8-e759-4b2f-8300-e7a4c8b39b83')
+            throw Error('ORIGINAL_BASELINE_NOT_LIVE');
+          const expected='Owner-approved Discord-only smoke baseline restore';
+          const msg=current.annotations?.['workers/message']??current.annotations?.['workers/message']?.value??null;
+          const source=typeof msg==='string'?msg:typeof msg?.value==='string'?msg.value:null;
+          const match=source===expected;
+          console.log('CURRENT_DEPLOYMENT_ID='+String(current.id));
+          console.log('CURRENT_DEPLOYMENT_TIMESTAMP='+String(current.created_on||''));
+          console.log('CURRENT_DEPLOYMENT_WATCHDOG_RESTORE_ANNOTATION_MATCH='+match);
+          console.log('CURRENT_DEPLOYMENT_ANNOTATION_FORMAT='+typeof current.annotations);
+          console.log('DEPLOYMENTS_RETURNED_COUNT='+a.length);
+          console.log('BASELINE_RESTORED_AND_TRAFFIC_100_PERCENT_GET_ONLY_PASS');
+          NODE
