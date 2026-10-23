@@ -113,7 +113,7 @@ jobs:
               console.log('AI_ACCOUNT_AGGREGATE_NOT_NEURONS_AND_NOT_REALTIME_QUOTA');
             }
           }
-          const sql='SELECT name FROM sqlite_master WHERE type=\\'table\\' AND name IN (\\'swarm_jobs\\',\\'swarm_budget_days\\') ORDER BY name';
+          const sql="SELECT name FROM sqlite_master WHERE type='table' AND name IN ('swarm_jobs','swarm_budget_days') ORDER BY name";
           const read=await fetch(DISCORD_D1_URL,{method:'POST',
             headers:{Authorization:'Bearer '+process.env.D1_READ_TOKEN,'Content-Type':'application/json'},
             body:JSON.stringify({sql}),signal:AbortSignal.timeout(14000)});
