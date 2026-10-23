@@ -71,3 +71,5 @@ jobs:
           NODE
 
 # fresh observation after independent prearm
+
+# monitor owner-authenticated initial six-stage test after active version switch
