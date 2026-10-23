@@ -98,3 +98,5 @@ jobs:
           if(!d1.clean)throw Error('POST_SMOKE_D1_NOT_TERMINAL_OR_UNKNOWN');
           console.log('INDEPENDENT_GET_AND_SELECT_ONLY_AUDIT_PASS');
           NODE
+
+# Run final separate inspection after six-call live controller finished
