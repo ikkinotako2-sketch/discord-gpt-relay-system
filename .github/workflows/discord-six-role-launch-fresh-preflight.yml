@@ -1,0 +1,127 @@
+name: Discord Six-role Initial Live Readiness GET ONLY
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-six-role-launch-fresh-preflight.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    if: ${{ github.event.head_commit.message == 'Inspect Discord six-call live launch conditions GET-only once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: a8357494c7204c7d4939caddf902707430719713}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Exact runtime status, free AI activity, D1, and independent emergency stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient,DISCORD_D1_URL} from './swarm/smoke-watchdog-d1.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/';
+          const primary='steep-glitter-b5cddiscord-ai-relay-lab';
+          const watchdog='discord-smoke-independent-watchdog-staged';
+          const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          const flags=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'];
+          const broad=process.env.CLOUDFLARE_API_TOKEN,narrow=process.env.RESTORE_TOKEN;
+          if(!broad||!narrow||!process.env.D1_READ_TOKEN)throw Error('MISSING_REQUIRED_SECRET');
+          async function get(worker,suffix,token) {
+            const r=await fetch(root+worker+suffix,{method:'GET',headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(14000)});
+            if(r.status!==200)throw Error('GET_NOT_200_'+worker+'_'+suffix+'_'+r.status);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('BAD_RESPONSE_'+suffix);return j.result;
+          }
+          const [deployment,settings,version,ws,watchSecrets,cron,d1]=await Promise.all([
+            get(primary,'/deployments',narrow),get(primary,'/settings',narrow),get(primary,'/versions/'+baseline,narrow),
+            get(watchdog,'/settings',broad),get(watchdog,'/secrets',broad),get(watchdog,'/schedules',broad),
+            createDiscordD1ReadClient({token:process.env.D1_READ_TOKEN}).snapshot()
+          ]);
+          if(!d1.clean)throw Error('D1_NOT_CLEAN');
+          const live=deployment.deployments?.[0];
+          if(live?.versions?.length!==1||live.versions[0].percentage!==100||live.versions[0].version_id!==baseline)
+            throw Error('PRIMARY_NOT_PINNED_BASELINE');
+          if(!Array.isArray(settings.bindings)||!Array.isArray(version.resources?.bindings)||!Array.isArray(ws.bindings))
+            throw Error('BINDINGS_INVALID');
+          for(const bs of [settings.bindings,version.resources.bindings]){
+            for(const k of flags){
+              const entries=bs.filter(b=>b.name===k);
+              if(entries.length>1||entries.some(b=>b.type!=='plain_text'||b.text!=='false'))
+                throw Error('FLAG_NOT_OFF_'+k);
+            }
+            for(const k of ['DISCORD_PUBLIC_KEY','DISCORD_ALLOWED_USER_ID','DISCORD_OAUTH_CLIENT_SECRET','DASHBOARD_COOKIE_KEY']){
+              const b=bs.filter(x=>x.name===k);
+              if(b.length!==1||b[0].type!=='secret_text')throw Error('DISCORD_OWNER_SECRET_UNVERIFIED');
+            }
+            const db=bs.filter(x=>x.name==='LOOP_DB');
+            if(db.length!==1||db[0].type!=='d1'||db[0].database_id!=='d80b08a4-0ff7-4320-9575-0d3c55cf7aba')
+              throw Error('DEDICATED_D1_MISSING');
+          }
+          for(const [k,v] of [['WATCHDOG_ARMED','false'],['WATCHDOG_APPROVAL','NOT_APPROVED'],
+            ['WATCHDOG_BASELINE_VERSION','UNSET'],['WATCHDOG_SMOKE_VERSION','UNSET'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','UNSET'],['WATCHDOG_EXPIRES_AT','UNSET']]){
+            const arr=ws.bindings.filter(x=>x.name===k);
+            if(arr.length!==1||arr[0].type!=='plain_text'||arr[0].text!==v)
+              throw Error('WATCHDOG_UNEXPECTED_SETTING_'+k);
+          }
+          if(!Array.isArray(watchSecrets)||!Array.isArray(cron?.schedules)||cron.schedules.length!==1)
+            throw Error('WATCHDOG_SECRETS_OR_CRON_INVALID');
+          for(const key of ['WATCHDOG_D1_READ_TOKEN','WATCHDOG_RESTORE_TOKEN'])
+            if(watchSecrets.filter(x=>x.name===key).length!==1)throw Error('WATCHDOG_CREDENTIAL_MISSING');
+          const home='https://'+primary+'.ikkinotako2.workers.dev';
+          const [health,unauthorized,ui,api,login]=await Promise.all([
+            fetch(home+'/',{signal:AbortSignal.timeout(12000)}),
+            fetch(home+'/',{method:'POST',body:'{}',signal:AbortSignal.timeout(12000)}),
+            fetch(home+'/command-center/swarm',{signal:AbortSignal.timeout(12000)}),
+            fetch(home+'/command-center/api/swarm/overview',{signal:AbortSignal.timeout(12000)}),
+            fetch(home+'/command-center/login',{redirect:'manual',signal:AbortSignal.timeout(12000)})
+          ]);
+          if(health.status!==200||unauthorized.status!==401||ui.status!==503||api.status!==503||
+             ![302,303,307,308].includes(login.status))
+             throw Error('OWNER_LOGIN_OR_PRIMARY_SECURITY_NOT_SAFE');
+          const loginUrl=new URL(login.headers.get('location'),home);
+          if(loginUrl.hostname!=='discord.com'||loginUrl.pathname!=='/oauth2/authorize')
+            throw Error('OAUTH_NOT_DISCORD');
+          console.log('BASELINE_100_PERCENT_ALL_SWARM_FLAGS_OFF');
+          console.log('DISCORD_SIX_ROLE_D1_CLEAN_AND_BINDINGS_PRESERVED');
+          console.log('WATCHDOG_PARKED_WITH_SCOPED_RESTORE_AND_DO_CRON');
+          console.log('OWNER_OAUTH_LOGIN_START_READY_ACTUAL_OWNER_SESSION_UNVERIFIED');
+          console.log('RUNNER_IMPLEMENTATION_MAX_OUTPUT_TOKENS_PER_CALL_360_AND_SIX_LOCAL_RESERVATIONS');
+          const day=new Date().toISOString().slice(0,10);
+          const query='query ($accountTag: string!,$start: Time!,$end: Time!) {viewer {accounts(filter: {accountTag:$accountTag}) {aiInferenceAdaptiveGroups(filter:{datetime_gt:$start,datetime_lt:$end},limit:100) {count sum {totalInputTokens totalOutputTokens} dimensions {modelId}}}}}';
+          const start=day+'T00:00:00Z',end=new Date().toISOString();
+          const response=await fetch('https://api.cloudflare.com/client/v4/graphql',{
+            method:'POST',headers:{Authorization:'Bearer '+broad,'Content-Type':'application/json'},
+            body:JSON.stringify({query,variables:{accountTag:account,start,end}}),
+            signal:AbortSignal.timeout(14000)});
+          if(response.status!==200){
+            console.log('AI_ACCOUNT_AGGREGATE=UNVERIFIED_HTTP_'+response.status);
+          }else{
+            const data=await response.json();
+            const rows=data?.data?.viewer?.accounts?.[0]?.aiInferenceAdaptiveGroups;
+            if(!Array.isArray(rows)||data.errors?.length)
+              console.log('AI_ACCOUNT_AGGREGATE=UNVERIFIED_SCHEMA_OR_SCOPE');
+            else{
+              const count=rows.reduce((n,r)=>n+(Number.isSafeInteger(r.count)?r.count:0),0);
+              console.log('AI_ACCOUNT_UTC_DAY='+day);
+              console.log('AI_ACCOUNT_REQUESTS_TO_NOW='+count);
+              console.log('AI_ACCOUNT_AGGREGATE_NOT_NEURONS_AND_NOT_REALTIME_QUOTA');
+            }
+          }
+          const sql='SELECT name FROM sqlite_master WHERE type=\\'table\\' AND name IN (\\'swarm_jobs\\',\\'swarm_budget_days\\') ORDER BY name';
+          const read=await fetch(DISCORD_D1_URL,{method:'POST',
+            headers:{Authorization:'Bearer '+process.env.D1_READ_TOKEN,'Content-Type':'application/json'},
+            body:JSON.stringify({sql}),signal:AbortSignal.timeout(14000)});
+          const sj=await read.json();
+          if(!read.ok||sj.success!==true||!sj.result?.[0]?.success)
+            throw Error('SWARM_D1_SCHEMA_READ_FAILED');
+          const tables=sj.result[0].results.map(x=>x.name);
+          console.log('SIX_ROLE_D1_REQUIRED_TABLES='+tables.length);
+          if(tables.length!==2)throw Error('SWARM_D1_REQUIRED_TABLES_MISSING');
+          console.log('PRODUCTION_SAFE_GET_ONLY_NO_AI_NO_D1_CHANGE_NO_OTHER_PROJECT');
+          NODE
