@@ -1,0 +1,56 @@
+name: Discord Six-Call One-Shot Controller Offline Review
+on:
+  push:
+    branches: [experiment/discord-six-role-live-smoke-20261023]
+    paths:
+      - 'diagnostics/discord-six-role-live-controller.mjs'
+      - '.github/workflows/discord-six-role-one-shot-offline-review.yml'
+permissions: { contents: read }
+jobs:
+  offline-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Static single-worker scoping and code syntax
+        run: |
+          set -euo pipefail
+          node --check diagnostics/discord-six-role-live-controller.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const source=fs.readFileSync('diagnostics/discord-six-role-live-controller.mjs','utf8');
+          for(const phrase of [
+            'steep-glitter-b5cddiscord-ai-relay-lab',
+            'discord-smoke-independent-watchdog-staged',
+            'WATCHDOG_ARMED',
+            'PREARM_TO_CAPTURE_SMOKE_DEPLOYMENT',
+            'SWARM_DAILY_CALL_CAP = "6"',
+            'SIX_ROLE_SIX_CALLS_VERIFIED=',
+            'await fallbackRestore();',
+            'await publicStatus(false);',
+            'createDiscordD1ReadClient',
+            'GITHUB_REPOSITORY',
+            'OWNER_MUST_USE_DISCORD_OAUTH_SESSION_AND_CLICK_CREATE_ONE_CYCLE'
+          ])if(!source.includes(phrase))throw Error('SAFETY_CONTROLLER_REQUIRED_MARKER_MISSING');
+          if(source.includes('project-love-machine')||source.includes('YOUTUBE_API_KEY')||
+             source.includes('DISCORD_BOT_TOKEN')||source.includes('DISCORD_OAUTH_CLIENT_SECRET='))
+            throw Error('UNRELATED_OR_UNSAFE_SECRET_PATH');
+          if(/(?:INSERT INTO|DELETE FROM|UPDATE swarm_jobs|UPDATE relay_loop_jobs)/i.test(source))
+            throw Error('DIRECT_D1_MUTATION_MUST_NOT_BE_IN_LIVE_CONTROLLER');
+          if(!source.includes('if(!restoredByAlarm)throw Error')||
+             !source.includes('if(!success)throw Error'))
+            throw Error('MISSING_END_TO_END_PROOF_FAIL_CLOSED');
+          console.log('DISCORD_CONTROLLER_STATIC_SINGLE_SCOPE_PASS');
+          NODE
+      - name: Full Discord watchdog and six-agent offline regression
+        run: |
+          set -euo pipefail
+          node --test swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs swarm/smoke-restore-executor.test.mjs swarm/smoke-restore-guard.test.mjs swarm/bridge.test.mjs swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs
+      - name: Compile only; never call Cloudflare in review
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.119.0 deploy --dry-run --config wrangler.command-center.toml --outdir /tmp/discord-review-only
+          npx --yes wrangler@4.119.0 deploy --dry-run --config swarm/wrangler.watchdog.example.toml --outdir /tmp/discord-watchdog-review-only
+          echo 'NO_API_TOKEN_NO_D1_WRITE_NO_DEPLOY_NO_INFERENCE'
