@@ -1,0 +1,71 @@
+name: Discord Six-role Current Live Progress GET Only
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-current-six-role-progress-readonly.yml']
+permissions: {contents: read}
+jobs:
+  pulse:
+    if: ${{ github.event.head_commit.message == 'Read only current Discord six-call smoke progress once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: a8357494c7204c7d4939caddf902707430719713}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Read current exact deployment, Watchdog flags, and isolated D1 no mutation
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient,DISCORD_D1_URL} from './swarm/smoke-watchdog-d1.mjs';
+          const root='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/';
+          async function get(w,s,t){
+            const r=await fetch(root+w+s,{headers:{Authorization:'Bearer '+t},signal:AbortSignal.timeout(12000)});
+            if(r.status!==200)throw Error('SCOPED_GET_'+r.status);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('CLOUDFLARE_RESPONSE_INVALID');
+            return j.result;
+          }
+          const primary='steep-glitter-b5cddiscord-ai-relay-lab',watch='discord-smoke-independent-watchdog-staged';
+          const [deploy,ws,ps,d1]=await Promise.all([
+            get(primary,'/deployments',process.env.RESTORE_TOKEN),
+            get(watch,'/settings',process.env.CF_TOKEN),
+            get(primary,'/settings',process.env.RESTORE_TOKEN),
+            createDiscordD1ReadClient({token:process.env.D1_READ_TOKEN}).snapshot()
+          ]);
+          if(!Array.isArray(ws?.bindings)||!Array.isArray(ps?.bindings))throw Error('BINDINGS_UNVERIFIED');
+          const active=deploy?.deployments?.[0];
+          if(!active||active.versions?.length!==1||active.versions[0].percentage!==100)
+            throw Error('PRIMARY_TRAFFIC_SPLIT_OR_UNKNOWN');
+          const version=active.versions[0].version_id;
+          console.log('CURRENT_PRIMARY_VERSION='+version);
+          console.log('CURRENT_PRIMARY_IS_BASELINE='+(version==='18c379e8-e759-4b2f-8300-e7a4c8b39b83'));
+          function field(bs,k){const a=bs.filter(x=>x.name===k);return a.length===1&&a[0].type==='plain_text'?a[0].text:'UNVERIFIED';}
+          console.log('WATCHDOG_ARMED_STATE='+field(ws.bindings,'WATCHDOG_ARMED'));
+          console.log('WATCHDOG_APPROVAL_STATE='+field(ws.bindings,'WATCHDOG_APPROVAL'));
+          console.log('WATCHDOG_SMOKE_VERSION_PIN='+field(ws.bindings,'WATCHDOG_SMOKE_VERSION'));
+          console.log('WATCHDOG_EXPIRY_PIN='+field(ws.bindings,'WATCHDOG_EXPIRES_AT'));
+          const all=['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'].map(x=>field(ps.bindings,x));
+          console.log('PRIMARY_SCRIPT_FLAGS='+all.join(','));
+          console.log('D1_CLEAN='+d1.clean);
+          const sql="SELECT status,calls_used,cycles,created_at FROM swarm_jobs WHERE created_at>"+(Date.now()-30*60*1000)+" ORDER BY created_at DESC LIMIT 4";
+          const r=await fetch(DISCORD_D1_URL,{method:'POST',headers:{
+            Authorization:'Bearer '+process.env.D1_READ_TOKEN,'Content-Type':'application/json'
+          },body:JSON.stringify({sql}),signal:AbortSignal.timeout(12000)});
+          const data=await r.json();
+          if(!r.ok||data.success!==true||data.result?.[0]?.success!==true)throw Error('D1_PROGRESS_READ_UNVERIFIED');
+          const rows=data.result[0].results;
+          console.log('RECENT_SWARM_JOB_COUNT='+rows.length);
+          for(const x of rows)console.log('RECENT_SWARM_JOB='+String(x.status)+':'+String(x.calls_used)+'/'+String(x.cycles)*6);
+          const [ui,api]=await Promise.all([
+            fetch('https://'+primary+'.ikkinotako2.workers.dev/command-center/swarm',{redirect:'manual',signal:AbortSignal.timeout(12000)}),
+            fetch('https://'+primary+'.ikkinotako2.workers.dev/command-center/api/swarm/overview',{signal:AbortSignal.timeout(12000)})
+          ]);
+          console.log('OWNER_SWARM_UI_HTTP='+ui.status);
+          console.log('OWNER_SWARM_API_HTTP='+api.status);
+          console.log('GET_AND_SELECT_ONLY_NO_AI_OR_MUTATION');
+          NODE
