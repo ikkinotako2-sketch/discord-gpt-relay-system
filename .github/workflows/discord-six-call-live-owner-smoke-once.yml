@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: cb9ae8fbea69868848479339565c29783fb4e5f1
+          ref: ea31d67a4f74f386b8b24ceed222f74f5f1fe72f
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - name: Confirm exact approved single-run scope and previous offline checks
@@ -33,7 +33,7 @@ jobs:
           test -n "$DISCORD_D1_READ_TOKEN"
           node --check diagnostics/discord-six-role-live-controller.mjs
           node --test swarm/smoke-watchdog.test.mjs swarm/smoke-watchdog-alarm.test.mjs swarm/smoke-restore-executor.test.mjs swarm/bridge.test.mjs swarm/runner.test.mjs swarm/cron.test.mjs
-          echo 'MAX6_OWNER_OAUTH_REQUIRED; IF_NO_OWNER_TASK_AUTOMATIC_BASELINE_RESTORE_STILL_REQUIRED'
+          echo 'MAX6_OWNER_OAUTH_REQUIRED; 19-MINUTE TEST; IF_NO_OWNER_TASK_BASELINE_RESTORE_REQUIRED'
       - name: Execute bounded live experiment with independent prearmed recovery and mandatory cleanup
         shell: bash
         run: |
