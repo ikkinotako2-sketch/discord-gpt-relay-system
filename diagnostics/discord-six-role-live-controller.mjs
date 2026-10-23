@@ -22,6 +22,7 @@ const parkedConfig='swarm/wrangler.watchdog.example.toml';
 const armedConfig='swarm/wrangler.watchdog-six-call-one-shot.toml';
 const safeOffConfig='wrangler.discord-flags-off-one-shot.toml';
 const reader=createDiscordD1ReadClient({token:d1token});
+const TEST_START=Date.now();
 let tail=null,tailOutput='',expiry=0,candidate=null,armed=false,liveDeployed=false;
 let success=false,jobSeen=false,restoredByAlarm=false,postedFallback=false,shadowNeedsOff=false;
 let status='STARTING';
@@ -236,8 +237,8 @@ async function deploySmoke(){
   console.log('SIX_CALL_SMOKE_DEPLOYED_WITH_REAL_PREARMED_DO_ALARM_EXPIRES='+new Date(expiry).toISOString());
 }
 async function jobState(){
-  const start=Number(process.env.GITHUB_RUN_STARTED_AT_MS||0)||Date.now()-20*60*1000;
-  const rows=await d1Query('SELECT status,calls_used,cycles,created_at FROM swarm_jobs WHERE created_at>='+Math.floor(start-60000)+' ORDER BY created_at DESC LIMIT 3');
+  const rows=await d1Query('SELECT status,calls_used,cycles,created_at FROM swarm_jobs WHERE created_at>='+TEST_START+' ORDER BY created_at DESC LIMIT 3');
+  requireTrue(rows.length<=1,'MORE_THAN_ONE_JOB_CREATED_DURING_SMOKE');
   return rows;
 }
 async function observe(){
