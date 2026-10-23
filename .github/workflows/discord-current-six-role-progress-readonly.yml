@@ -75,3 +75,5 @@ jobs:
 # monitor owner-authenticated initial six-stage test after active version switch
 
 # read after candidate activation 2026-10-23
+
+# 2026-10-23 observed live initial smoke condition again
