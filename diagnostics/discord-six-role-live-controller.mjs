@@ -233,7 +233,7 @@ async function deploySmoke(){
   requireTrue(after?.version===candidate&&after.id===json.result.id,'SMOKE_DEPLOYMENT_RECEIPT_MISMATCH');
   await publicStatus(true);
   console.log('OWNER_SIX_ROLE_DASHBOARD_READY=https://'+PRIMARY+'.ikkinotako2.workers.dev/command-center/swarm');
-  console.log('OWNER_MUST_USE_DISCORD_OAUTH_SESSION_AND_CLICK_CREATE_ONE_CYCLE');
+  console.log('OWNER_MUST_USE_DISCORD_OAUTH_SESSION_AND_CLICK_CREATE_ONE_CYCLE_IMMEDIATELY');
   console.log('SIX_CALL_SMOKE_DEPLOYED_WITH_REAL_PREARMED_DO_ALARM_EXPIRES='+new Date(expiry).toISOString());
 }
 async function jobState(){
@@ -330,7 +330,7 @@ async function main(){
   await Promise.all([primarySafe(),parked()]);
   console.log('PREDEPLOY_PRIMARY_AND_WATCHDOG_READINESS_PASS');
   // The task can be created only by the real Discord owner through authenticated OAuth+CSRF.
-  expiry=Date.now()+16*60*1000;
+  expiry=Date.now()+19*60*1000;
   makeCandidate();
   await cmd(candidateConfig,['deploy','--dry-run','--outdir','/tmp/discord-smoke-compiled'],narrow);
   // Wrangler may exit 1 after a successful version upload while requesting account subdomain.
