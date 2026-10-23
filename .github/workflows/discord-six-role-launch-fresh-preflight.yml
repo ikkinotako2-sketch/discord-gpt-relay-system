@@ -125,3 +125,5 @@ jobs:
           if(tables.length!==2)throw Error('SWARM_D1_REQUIRED_TABLES_MISSING');
           console.log('PRODUCTION_SAFE_GET_ONLY_NO_AI_NO_D1_CHANGE_NO_OTHER_PROJECT');
           NODE
+
+# Preflight refresh after verified owner login on 2026-10-23
