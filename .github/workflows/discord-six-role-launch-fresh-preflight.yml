@@ -127,3 +127,5 @@ jobs:
           NODE
 
 # Preflight refresh after verified owner login on 2026-10-23
+
+# 2026-10-24: verify that user-observed 'Six-role engine disabled' is due to the restored OFF baseline.
