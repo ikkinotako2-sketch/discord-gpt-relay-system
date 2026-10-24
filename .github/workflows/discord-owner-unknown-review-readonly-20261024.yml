@@ -1,0 +1,87 @@
+name: Discord Owner UNKNOWN Acknowledgement Proof (READ ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-owner-unknown-review-readonly-20261024.yml']
+permissions:
+  contents: read
+  issues: read
+jobs:
+  prove-real-owner-review:
+    if: ${{ github.event.head_commit.message == 'Verify exact owner review of Discord UNKNOWN by GET and SELECT once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      GITHUB_READ_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: eeeebd6665e2384f32ed0a8e8014fd29ada29e0f
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify real GitHub owner review against preserved D1 UNKNOWN without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'ikkinotako2-sketch/discord-gpt-relay-system'
+          test -n "$DISCORD_D1_READ_TOKEN"
+          test -n "$GITHUB_READ_TOKEN"
+          node --test swarm/smoke-owner-approval.test.mjs swarm/smoke-unknown-review.test.mjs >/dev/null
+          node --input-type=module <<'NODE'
+          import {DISCORD_D1_URL,createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          import {verifyUnknownReviewComment} from './swarm/smoke-owner-approval.mjs';
+          import {assessHistoricalUnknown} from './swarm/smoke-unknown-review.mjs';
+          const repo='ikkinotako2-sketch/discord-gpt-relay-system';
+          const ref='https://github.com/'+repo+'/issues/14#issuecomment-6384216446';
+          async function select(query){
+            const r=await fetch(DISCORD_D1_URL,{method:'POST',
+              headers:{Authorization:'Bearer '+process.env.DISCORD_D1_READ_TOKEN,
+                'Content-Type':'application/json'},
+              body:JSON.stringify({sql:query}),signal:AbortSignal.timeout(12000)});
+            const j=await r.json();
+            if(!r.ok||j.success!==true||j.result?.length!==1||
+              j.result[0]?.success!==true||!Array.isArray(j.result[0].results))
+              throw Error('D1_READONLY_EVIDENCE_NOT_VERIFIED');
+            return j.result[0].results;
+          }
+          const [snapshot,rows,reservations]=await Promise.all([
+            createDiscordD1ReadClient({token:process.env.DISCORD_D1_READ_TOKEN}).snapshot(),
+            select("SELECT status,calls_used,cycles,stop_requested,active_slot,last_error,created_at,updated_at,LENGTH(history_json) AS history_length,LENGTH(checkpoint) AS checkpoint_length FROM swarm_jobs WHERE status='unknown' ORDER BY created_at DESC LIMIT 2"),
+            select("SELECT COALESCE(SUM(reserved),0) AS reserved FROM swarm_budget_days WHERE utc_day='"+new Date().toISOString().slice(0,10)+"'")
+          ]);
+          if(rows.length!==1||snapshot.unknownJobs!==1||snapshot.legacyActive!==0||
+            snapshot.swarmActive!==0||snapshot.pendingStop!==0)
+            throw Error('DISCORD_UNKNOWN_NOT_EXACTLY_ONE_TERMINAL');
+          const row=rows[0];
+          const fetchGitHub=(url,options)=>fetch(url,{...options,
+            headers:{...options.headers,Authorization:'Bearer '+process.env.GITHUB_READ_TOKEN}});
+          const now=Date.now();
+          const owner=await verifyUnknownReviewComment({
+            ownerApprovalReference:ref,
+            unknownCreatedAt:row.created_at,unknownUpdatedAt:row.updated_at,
+            nowMs:now,fetchImpl:fetchGitHub
+          });
+          if(owner.ownerCommentVerified!==true||owner.authorizesLiveActions!==false)
+            throw Error('REAL_OWNER_ACKNOWLEDGEMENT_NOT_VERIFIED_'+owner.reason);
+          console.log('GITHUB_OWNER_IDENTITY_COMMENT_AND_TIME_VERIFIED');
+          console.log('HISTORICAL_D1_UNKNOWN_PRESERVED_COUNT='+snapshot.unknownJobs);
+          console.log('HISTORICAL_D1_CALLS_USED='+row.calls_used);
+          console.log('HISTORICAL_D1_LAST_ERROR_IS_MODEL_OUTCOME_UNKNOWN='+
+            String(row.last_error==='MODEL_OUTCOME_UNKNOWN'));
+          const used=Number(reservations[0]?.reserved??NaN);
+          const result=assessHistoricalUnknown({
+            snapshot,rows,review:owner.review,nowMs:now,
+            dailyReserved:used,dailyCap:6
+          });
+          console.log('CURRENT_UTC_DAY='+new Date(now).toISOString().slice(0,10));
+          console.log('CURRENT_DAY_LOCAL_RESERVATIONS='+used);
+          console.log('HISTORICAL_REVIEW_GATE_STATUS='+result.status);
+          console.log('HISTORICAL_REVIEW_GATE_BLOCKERS='+result.blockers.join(','));
+          if(result.authorizesLiveActions!==false)
+            throw Error('ILLEGAL_AUTOMATIC_EXECUTION_AUTHORIZATION');
+          if(result.blockers.some(k=>k==='EXPLICIT_OWNER_AUDIT_REVIEW_REQUIRED'||k==='UNKNOWN_ROW_CHANGED_OR_UNVERIFIED'))
+            throw Error('OWNER_REVIEW_OR_HISTORY_MISMATCH');
+          console.log('OWNER_COMMENT_PROOF_SUCCESS_NEVER_EXECUTION_APPROVAL');
+          console.log('NO_D1_MUTATIONS_NO_CLOUDFLARE_WRITE_NO_AI_NO_OLD_JOB_RETRY');
+          NODE
