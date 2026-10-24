@@ -63,6 +63,34 @@ test('ambiguous inference error is terminal unknown and never auto retried',asyn
   assert.equal(calls,1);
 });
 
+
+test('provider invocation failure stays terminal UNKNOWN and is not retried',async()=>{
+  const db=fixture();
+  await createTask(db,{runId:'phase_invoke',ownerId:OWNER,task:'test',now:100});
+  let calls=0;
+  const ai={run:async()=>{calls++;throw Error('provider secrets and arbitrary text must never be logged')}};
+  const result=await runOneSwarmStep({db,ai,budgetCheck:async()=> 'allowed',now:200,leaseOwner:'lease'});
+  assert.equal(result.status,'unknown');
+  assert.equal(calls,1);
+  const job=(await ownerSnapshot(db,OWNER)).jobs[0];
+  assert.equal(job.status,'unknown');
+  assert.equal(job.callsUsed,1);
+  assert.equal(job.lastCheckpoint,'');
+});
+test('unparseable model completion also stays terminal UNKNOWN and reserves one call',async()=>{
+  const db=fixture();
+  await createTask(db,{runId:'phase_parse',ownerId:OWNER,task:'test',now:100});
+  let calls=0;
+  const ai={run:async()=>{calls++;return {output:[{type:'reasoning',summary:[]}]}}};
+  const result=await runOneSwarmStep({db,ai,budgetCheck:async()=> 'allowed',now:200,leaseOwner:'lease'});
+  assert.equal(result.status,'unknown');
+  assert.equal(calls,1);
+  const job=(await ownerSnapshot(db,OWNER)).jobs[0];
+  assert.equal(job.status,'unknown');
+  assert.equal(job.callsUsed,1);
+  assert.equal(job.lastCheckpoint,'');
+});
+
 test('idle cron must not consume budget-monitor checks or inference',async()=>{
   const db=fixture();let monitored=0,called=0;
   const result=await runOneSwarmStep({db,ai:{run:async()=>{called++;return {response:'ok'};}},

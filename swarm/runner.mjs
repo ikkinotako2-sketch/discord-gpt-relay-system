@@ -26,13 +26,20 @@ export async function runOneSwarmStep({db,ai,budgetCheck,now=Date.now(),leaseOwn
   if(!claim)return {status:'idle'};
   const {stage,modelInstructions,userText}=buildStageMessages(claim);
   let output;
+  // Classify the stage of an ambiguous failure without printing provider errors,
+  // prompts, owner IDs or model output. The result remains terminal UNKNOWN.
+  let failurePhase='invoke';
   try{
     const result=await ai.run(GPT_OSS_MODEL,{
       messages:[{role:'system',content:modelInstructions},{role:'user',content:userText}],
       max_tokens:360,reasoning_effort:'low',temperature:0.2
     });
+    failurePhase='extract';
     output=extractLoopFinalText(result);
   }catch{
+    // Safe diagnostic: phase and fixed role only, no raw error strings.
+    console.log(JSON.stringify({event:'discord_swarm_model_outcome_unknown',
+      phase:failurePhase,role:stage.id}));
     // A model request may have been billed before it failed; never blindly retry.
     try {await failStage(db,claim,'MODEL_OUTCOME_UNKNOWN',Date.now());}catch{}
     return {status:'unknown',role:stage.id};
