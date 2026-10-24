@@ -39,3 +39,5 @@ jobs:
         run: |
           set -euo pipefail
           node diagnostics/discord-six-role-live-controller.mjs
+
+# 2026-10-24 explicit owner at console; fresh max6 once; no replay if failed.
