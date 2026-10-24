@@ -1,0 +1,17 @@
+name: Discord UNKNOWN Incident Pure Offline Gate
+on:
+  pull_request:
+    branches: [main]
+    paths: ['swarm/smoke-unknown-review.mjs','swarm/smoke-unknown-review.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-unknown-review-offline.yml']
+permissions: {contents: read}
+jobs:
+  review-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: node --test swarm/smoke-unknown-review.test.mjs swarm/smoke-live-preflight.test.mjs
+      - run: node swarm/verify-isolation.mjs
+      - run: echo 'PURE_REVIEW_ONLY_NO_D1_WRITE_NO_MODEL_NO_DEPLOY'
