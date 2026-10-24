@@ -93,3 +93,5 @@ jobs:
           console.log('SWARM_API='+api.status);
           console.log('GET_SELECT_ONLY_NO_RETRY_NO_REOPEN_NO_AI_NO_MUTATION');
           NODE
+
+# Post-merge PR16 safety observation: read-only; no job status mutation.
