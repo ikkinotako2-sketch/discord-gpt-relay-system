@@ -95,3 +95,5 @@ jobs:
           NODE
 
 # Post-merge PR16 safety observation: read-only; no job status mutation.
+
+# 2026-10-24 final post-PR18-and-PR19 read-only audit. No D1 changes or AI calls.
