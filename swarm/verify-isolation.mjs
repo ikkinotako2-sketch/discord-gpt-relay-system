@@ -50,7 +50,7 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const prearmFixPaths=new Set(['swarm/smoke-watchdog-core.mjs','swarm/smoke-watchdog-worker.mjs','swarm/smoke-watchdog.test.mjs','swarm/smoke-watchdog-alarm.test.mjs','swarm/verify-isolation.mjs','swarm/SMOKE_TEST_SAFE_RUNBOOK.md']);
   const modelErrorFixPaths=new Set(['swarm/runner.mjs','swarm/runner.test.mjs','swarm/verify-isolation.mjs']);
   const unknownReviewPaths=new Set(['swarm/smoke-unknown-review.mjs','swarm/smoke-unknown-review.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-unknown-review-offline.yml']);
-  const shapeDiagnosticPaths=new Set(['swarm/runner.mjs','swarm/model-result-diagnostics.mjs','swarm/model-result-diagnostics.test.mjs','swarm/verify-isolation.mjs']);
+  const shapeDiagnosticPaths=new Set(['swarm/runner.mjs','swarm/model-result-diagnostics.mjs','swarm/model-result-diagnostics.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-offline-tests.yml']);
   const illegal=paths.filter(path=>shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
