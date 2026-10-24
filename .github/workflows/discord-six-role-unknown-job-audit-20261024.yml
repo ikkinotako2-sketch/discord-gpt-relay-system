@@ -1,0 +1,95 @@
+name: Discord Six-role UNKNOWN Job Audit 2026-10-24 (GET/SELECT ONLY)
+on:
+  push:
+    branches: [diagnostics/discord-swarm-disabled-release-gate-20261012]
+    paths: ['.github/workflows/discord-six-role-unknown-job-audit-20261024.yml']
+permissions: {contents: read}
+jobs:
+  audit:
+    if: ${{ github.event.head_commit.message == 'Read only October 24 Discord six-call unknown job audit once' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      NARROW: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      BROAD: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      D1_READ: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: a8357494c7204c7d4939caddf902707430719713}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Read only actual Discord job unknown, Worker flags, and Watchdog
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {DISCORD_D1_URL,createDiscordD1ReadClient} from './swarm/smoke-watchdog-d1.mjs';
+          const root='https://api.cloudflare.com/client/v4/accounts/6c8ccd6aface937ab5dabef61cb64534/workers/scripts/';
+          const primary='steep-glitter-b5cddiscord-ai-relay-lab',watch='discord-smoke-independent-watchdog-staged';
+          async function cf(w,s,t){
+            if(!t)throw Error('READ_TOKEN_MISSING');
+            const r=await fetch(root+w+s,{method:'GET',headers:{Authorization:'Bearer '+t},signal:AbortSignal.timeout(13000)});
+            if(r.status!==200)throw Error('CLOUDFLARE_READ_HTTP_'+r.status+'_'+s);
+            const j=await r.json();if(j.success!==true||!j.result)throw Error('CLOUDFLARE_UNVERIFIED_'+s);
+            return j.result;
+          }
+          async function sql(query) {
+            const r=await fetch(DISCORD_D1_URL,{method:'POST',
+              headers:{Authorization:'Bearer '+process.env.D1_READ,'Content-Type':'application/json'},
+              body:JSON.stringify({sql:query}),signal:AbortSignal.timeout(13000)});
+            const j=await r.json();
+            if(!r.ok||j.success!==true||j.result?.length!==1||j.result[0]?.success!==true||
+              !Array.isArray(j.result[0].results))throw Error('D1_READ_NOT_PROVEN');
+            return j.result[0].results;
+          }
+          const [p,s,w,sec,cron,snap,rows,budget]=await Promise.all([
+            cf(primary,'/deployments',process.env.NARROW),
+            cf(primary,'/settings',process.env.NARROW),
+            cf(watch,'/settings',process.env.BROAD),
+            cf(watch,'/secrets',process.env.BROAD),
+            cf(watch,'/schedules',process.env.BROAD),
+            createDiscordD1ReadClient({token:process.env.D1_READ}).snapshot(),
+            sql("SELECT status,calls_used,cycles,stop_requested,active_slot,last_error,created_at,updated_at,expires_at,LENGTH(history_json) AS history_length,LENGTH(checkpoint) AS checkpoint_length FROM swarm_jobs WHERE created_at >= 1792800000000 ORDER BY created_at DESC LIMIT 4"),
+            sql("SELECT utc_day,COALESCE(SUM(reserved),0) AS reservations FROM swarm_budget_days WHERE utc_day >= '2026-10-24' GROUP BY utc_day ORDER BY utc_day DESC LIMIT 2")
+          ]);
+          const d=p?.deployments?.[0];
+          if(d?.versions?.length!==1||d.versions[0].percentage!==100)throw Error('PRIMARY_VERSION_UNVERIFIED');
+          const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          console.log('PRIMARY_BASELINE_100_PERCENT='+String(d.versions[0].version_id===baseline));
+          console.log('PRIMARY_VERSION='+String(d.versions[0].version_id));
+          const v=(bs,k)=>{const a=bs.filter(x=>x?.name===k);return a.length===1&&a[0].type==='plain_text'?a[0].text:'NOT_VERIFIED';};
+          if(!Array.isArray(s?.bindings)||!Array.isArray(w?.bindings))throw Error('BINDINGS_INVALID');
+          for(const k of ['SWARM_API_ENABLED','SWARM_RUNNER_ENABLED','SWARM_EXECUTION_APPROVED','SWARM_EXCLUSIVE_MODE'])
+            console.log('PRIMARY_FLAG_'+k+'='+v(s.bindings,k));
+          for(const k of ['WATCHDOG_ARMED','WATCHDOG_APPROVAL','WATCHDOG_BASELINE_VERSION','WATCHDOG_SMOKE_VERSION','WATCHDOG_EXPIRES_AT'])
+            console.log(k+'='+v(w.bindings,k));
+          console.log('WATCHDOG_SCOPED_SECRETS_PRESENT='+String(Array.isArray(sec)&&
+            ['WATCHDOG_RESTORE_TOKEN','WATCHDOG_D1_READ_TOKEN'].every(k=>sec.filter(x=>x?.name===k).length===1)));
+          console.log('WATCHDOG_ONE_MIN_CRON='+String(Array.isArray(cron?.schedules)&&
+            cron.schedules.length===1&&cron.schedules[0].cron==='* * * * *'));
+          console.log('D1_SNAPSHOT_LEGACY_ACTIVE='+snap.legacyActive);
+          console.log('D1_SNAPSHOT_SWARM_ACTIVE='+snap.swarmActive);
+          console.log('D1_SNAPSHOT_UNKNOWN='+snap.unknownJobs);
+          console.log('D1_SNAPSHOT_PENDING_STOP='+snap.pendingStop);
+          console.log('D1_SNAPSHOT_CLEAN='+snap.clean);
+          console.log('D1_OCT24_JOBS='+rows.length);
+          for(const x of rows){
+            // Never log run ID, owner ID, task, checkpoint, history, secrets.
+            console.log('JOB='+JSON.stringify({status:x.status,calls_used:x.calls_used,cycles:x.cycles,
+              stop_requested:x.stop_requested,active_slot:x.active_slot,last_error:x.last_error,
+              created_at:x.created_at,updated_at:x.updated_at,expires_at:x.expires_at,
+              history_length:x.history_length,checkpoint_length:x.checkpoint_length}));
+          }
+          console.log('D1_LOCAL_RESERVATIONS='+JSON.stringify(budget));
+          const url='https://'+primary+'.ikkinotako2.workers.dev/';
+          const [home,signature,ui,api]=await Promise.all([
+            fetch(url,{signal:AbortSignal.timeout(13000)}),
+            fetch(url,{method:'POST',body:'{}',signal:AbortSignal.timeout(13000)}),
+            fetch(url+'command-center/swarm',{signal:AbortSignal.timeout(13000)}),
+            fetch(url+'command-center/api/swarm/overview',{signal:AbortSignal.timeout(13000)})
+          ]);
+          console.log('DISCORD_ROOT_HEALTH='+home.status);
+          console.log('DISCORD_UNSIGNED_SIGNATURE='+signature.status);
+          console.log('SWARM_UI='+ui.status);
+          console.log('SWARM_API='+api.status);
+          console.log('GET_SELECT_ONLY_NO_RETRY_NO_REOPEN_NO_AI_NO_MUTATION');
+          NODE
