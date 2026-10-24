@@ -104,3 +104,55 @@ test('multiple missing conditions reported without mutating input',()=>{
 test('incorrect clock can never authorize review',()=>{
  blocks(assessDiscordSmokePreflight(evidence(),0),'CURRENT_CLOCK_UNVERIFIED');
 });
+
+const reviewTime=Date.UTC(2026,9,25,1);
+const createdTime=Date.UTC(2026,9,24,11,50);
+function reviewed(){
+ const x=evidence();
+ x.checkedAt=reviewTime-30000;x.deadlineMs=reviewTime+600000;
+ x.account={...x.account,utcDay:'2026-10-25',usageCheckedAt:reviewTime-10000};
+ x.jobs.unknownJobs=1;
+ x.historicalUnknown={
+   rows:[{status:'unknown',last_error:'MODEL_OUTCOME_UNKNOWN',calls_used:1,cycles:1,active_slot:null,
+     stop_requested:0,created_at:createdTime,updated_at:createdTime+10000,history_length:2,checkpoint_length:0}],
+   review:{kind:'OWNER_REVIEWED_UNCERTAIN_NO_RETRY',reviewedAt:createdTime+20000,createdAt:createdTime,
+     updatedAt:createdTime+10000,callsUsed:1,error:'MODEL_OUTCOME_UNKNOWN',
+     ownerApprovalReference:'https://github.com/ikkinotako2-sketch/discord-gpt-relay-system/issues/14#issuecomment-123'},
+   dailyReserved:0,dailyCap:6,ownerCommentVerified:true};
+ return x;
+}
+test('reviewed historical unknown remains visible with NO live authorization',()=>{
+ const x=reviewed(),r=assessDiscordSmokePreflight(x,reviewTime);
+ assert.equal(x.jobs.unknownJobs,1);
+ assert.equal(r.status,'OWNER_REVIEW_REQUIRED');
+ assert.equal(r.authorizesLiveActions,false);
+ assert.ok(r.blockers.includes('HISTORICAL_UNKNOWN_PRESERVED_RUNTIME_REVIEW_NOT_WIRED'));
+});
+test('owner comment URL alone cannot pass (unverified identity)',()=>{
+ const x=reviewed();x.historicalUnknown.ownerCommentVerified=false;
+ blocks(assessDiscordSmokePreflight(x,reviewTime),'ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+});
+test('missing real reviewed historical record blocks',()=>{
+ const x=reviewed();x.historicalUnknown.rows=[];
+ blocks(assessDiscordSmokePreflight(x,reviewTime),'ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+});
+test('same UTC day blocks even with correct owner review',()=>{
+ const x=reviewed(),time=Date.UTC(2026,9,24,20);
+ x.checkedAt=time-5000;x.account.utcDay='2026-10-24';x.account.usageCheckedAt=time-3000;
+ x.deadlineMs=time+600000;
+ blocks(assessDiscordSmokePreflight(x,time),'ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+});
+test('new day local reservations not zero blocks',()=>{
+ const x=reviewed();x.historicalUnknown.dailyReserved=1;
+ blocks(assessDiscordSmokePreflight(x,reviewTime),'ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+});
+test('active job or additional unknown blocks even if historical record reviewed',()=>{
+ for(const key of ['swarmActive','unknownJobs']){
+  const x=reviewed();x.jobs[key]=key==='unknownJobs'?2:1;
+  blocks(assessDiscordSmokePreflight(x,reviewTime),'ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+ }
+});
+test('historical record changed from owner review blocks',()=>{
+ const x=reviewed();x.historicalUnknown.rows[0].updated_at++;
+ blocks(assessDiscordSmokePreflight(x,reviewTime),'ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+});

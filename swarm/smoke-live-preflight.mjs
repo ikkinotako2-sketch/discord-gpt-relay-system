@@ -1,6 +1,7 @@
 // Offline-only preflight evidence evaluator. NO API access, Worker deployment,
 // D1 access, secrets, or authority to start inference. Intended for live evidence review.
 import {DISCORD_SMOKE_TARGET, FLAGS} from './smoke-restore-guard.mjs';
+import {assessHistoricalUnknown} from './smoke-unknown-review.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FRESH_MS=5*60*1000;
 const NEURONS_PER_DAY=10000;
@@ -45,8 +46,19 @@ export function assessDiscordSmokePreflight(evidence={},nowMs=Date.now()){
     reject('DISCORD_D1_BINDING_UNVERIFIED');
  }
  const jobs=evidence?.jobs;
- if(!jobs||!['legacyActive','swarmActive','unknownJobs','pendingStop'].every(k=>int(jobs[k])&&jobs[k]===0))
-  reject('ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+ let reviewedHistoricalUnknown=false;
+ if(!jobs||!['legacyActive','swarmActive','unknownJobs','pendingStop'].every(k=>int(jobs[k])))
+   reject('ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+ else if(jobs.unknownJobs===1&&jobs.legacyActive===0&&jobs.swarmActive===0&&jobs.pendingStop===0){
+   const h=evidence?.historicalUnknown;
+   const a=assessHistoricalUnknown({snapshot:jobs,rows:h?.rows,review:h?.review,
+     nowMs,dailyReserved:h?.dailyReserved,dailyCap:h?.dailyCap});
+   // A URL alone does not prove owner identity. Authenticated verifier remains mandatory.
+   if(a.status==='REVIEWED_HISTORICAL_UNKNOWN_NEEDS_ALL_LIVE_PREFLIGHTS'&&h?.ownerCommentVerified===true)
+     reviewedHistoricalUnknown=true;
+   else reject('ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
+ }else if(jobs.legacyActive!==0||jobs.swarmActive!==0||jobs.unknownJobs!==0||jobs.pendingStop!==0)
+   reject('ACTIVE_UNKNOWN_OR_STOP_PENDING_JOBS');
  if(!int(evidence?.githubActiveRuns)||evidence.githubActiveRuns!==0)
   reject('GITHUB_ACTIONS_IN_PROGRESS_OR_UNVERIFIED');
  const acct=evidence?.account;
@@ -74,7 +86,8 @@ export function assessDiscordSmokePreflight(evidence={},nowMs=Date.now()){
  // Explicitly NEVER returns READY/ALLOW; metrics may lag or another agent may
  // consume the account-wide allowance between observations. Owner must review.
  return {status:'OWNER_REVIEW_REQUIRED',
-  blockers:['REALTIME_QUOTA_NOT_RESERVED','NON_ATOMIC_DEPLOYMENT_REQUIRES_LIVE_COORDINATION'],
+  blockers:['REALTIME_QUOTA_NOT_RESERVED','NON_ATOMIC_DEPLOYMENT_REQUIRES_LIVE_COORDINATION',
+   ...(reviewedHistoricalUnknown?['HISTORICAL_UNKNOWN_PRESERVED_RUNTIME_REVIEW_NOT_WIRED']:[])],
   authorizesLiveActions:false,
   note:'All supplied evidence predicates passed. This is not a license to deploy or infer.'};
 }
