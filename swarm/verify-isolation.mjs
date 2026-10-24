@@ -27,7 +27,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const prearmSafetyFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-prearm-before-deploy-20261022';
   const modelErrorSafetyFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-model-error-phase-no-retry-20261024';
   const unknownReviewFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-unknown-review-evidence-20261024';
-  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix)
+  const shapeDiagnosticFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-response-shape-safe-diagnostics-20261024';
+  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -49,7 +50,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const prearmFixPaths=new Set(['swarm/smoke-watchdog-core.mjs','swarm/smoke-watchdog-worker.mjs','swarm/smoke-watchdog.test.mjs','swarm/smoke-watchdog-alarm.test.mjs','swarm/verify-isolation.mjs','swarm/SMOKE_TEST_SAFE_RUNBOOK.md']);
   const modelErrorFixPaths=new Set(['swarm/runner.mjs','swarm/runner.test.mjs','swarm/verify-isolation.mjs']);
   const unknownReviewPaths=new Set(['swarm/smoke-unknown-review.mjs','swarm/smoke-unknown-review.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-unknown-review-offline.yml']);
-  const illegal=paths.filter(path=>unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
+  const shapeDiagnosticPaths=new Set(['swarm/runner.mjs','swarm/model-result-diagnostics.mjs','swarm/model-result-diagnostics.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-offline-tests.yml']);
+  const illegal=paths.filter(path=>shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));
