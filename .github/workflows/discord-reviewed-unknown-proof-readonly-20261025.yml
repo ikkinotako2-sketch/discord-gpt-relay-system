@@ -1,0 +1,63 @@
+name: Discord Historical UNKNOWN Safe-Off Proof Read-Only 20261025
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261025-once]
+    paths: [.github/workflows/discord-reviewed-unknown-proof-readonly-20261025.yml]
+permissions:
+  contents: read
+concurrency:
+  group: discord-reviewed-unknown-safe-off-audit-only
+  cancel-in-progress: false
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+      PRIMARY_READ_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      WATCHDOG_READ_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_READ_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 40090bd921c1dac517f9650f401ba1db3022675e
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Confirm exact audited commit and JS syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '40090bd921c1dac517f9650f401ba1db3022675e'
+          node --check swarm/smoke-reviewed-unknown-safe-off-collector.mjs
+          node --check swarm/smoke-historical-evidence-readonly.mjs
+      - name: Audit live safety state only (Cloudflare GET; D1 SELECT)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {collectReviewedUnknownSafeOff}
+            from './swarm/smoke-reviewed-unknown-safe-off-collector.mjs';
+          const nowMs=Date.now();
+          const githubFetchImpl=(url,opts={})=>fetch(url,{
+            ...opts,
+            headers:{...opts.headers,Authorization:'Bearer '+process.env.GH_READ_TOKEN}
+          });
+          const r=await collectReviewedUnknownSafeOff({
+            primaryReadToken:process.env.PRIMARY_READ_TOKEN,
+            watchdogReadToken:process.env.WATCHDOG_READ_TOKEN,
+            d1ReadToken:process.env.DISCORD_D1_READ_TOKEN,
+            githubFetchImpl,nowMs
+          });
+          console.log('AUDIT_STARTED='+new Date(nowMs).toISOString());
+          console.log('AUDIT_RESULT='+r.status);
+          console.log('AUDIT_REASON='+(r.reason||'NONE'));
+          console.log('PRODUCTION_INFERENCE_AUTHORIZED='+r.authorizesLiveActions);
+          console.log('ACCOUNT_WIDE_FREE_NEURONS='+String(r.accountWideFreeNeurons||'UNVERIFIED'));
+          console.log('HISTORICAL_UNKNOWN_PRESERVED='+(r.preservedUnknownCount===1));
+          console.log('PRODUCTION_MUTATIONS=NONE');
+          if(r.status!=='SAFE_OFF_WITH_REVIEWED_HISTORICAL_UNKNOWN')
+            throw Error('REVIEWED_HISTORICAL_UNKNOWN_READ_ONLY_AUDIT_BLOCKED');
+          console.log('REVIEWED_UNKNOWN_SAFE_OFF_READ_ONLY_AUDIT_PASS');
+          NODE
