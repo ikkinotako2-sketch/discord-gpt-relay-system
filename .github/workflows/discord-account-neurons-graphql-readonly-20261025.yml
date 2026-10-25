@@ -73,6 +73,10 @@ jobs:
             process.exit(0);
           }
           const groups=accounts[0].aiInferenceAdaptiveGroups;
+          console.log('GRAPHQL_ACCOUNT_COUNT='+accounts.length);
+          console.log('GRAPHQL_GROUP_ROWS='+groups.length);
+          console.log('GRAPHQL_TOTAL_NEURONS_METRIC_TYPE='+(groups[0]&&groups[0].sum?typeof groups[0].sum.totalNeurons:'MISSING'));
+          console.log('GRAPHQL_GROUP_COUNT_TYPE='+(groups[0]?typeof groups[0].count:'MISSING'));
           if(groups.length!==1||typeof groups[0]?.sum?.totalNeurons!=='number'||
              !Number.isFinite(groups[0].sum.totalNeurons)||groups[0].sum.totalNeurons<0){
             console.log('GRAPHQL_READ=NEURON_AGGREGATE_UNVERIFIED');
