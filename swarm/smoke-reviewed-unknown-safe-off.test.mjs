@@ -7,6 +7,8 @@ const now=Date.UTC(2026,9,25,9,0,0);
 const original=()=>({...F});
 const proof=()=>({
  target:{...DISCORD_SMOKE_TARGET},
+ snapshotCheckedAt:now-10000,
+ dailyReserved:0,dailyCap:6,budgetUtcDay:'2026-10-25',budgetCheckedAt:now-15000,
  snapshot:{legacyActive:0,swarmActive:0,pendingStop:0,unknownJobs:1},
  rows:[original()],
  ownerCommentVerified:true,
@@ -18,8 +20,8 @@ const proof=()=>({
   {type:'d1',name:'LOOP_DB',database_id:DISCORD_SMOKE_TARGET.databaseId},
   ...FLAGS.map(name=>({name,type:'plain_text',text:'false'}))
  ],
- deployment:{percentage:100,baselineActive:true,deploymentIdVerified:true},
- watchdog:{armed:false,approval:'NOT_APPROVED',parked:true},
+ deployment:{percentage:100,baselineActive:true,deploymentIdVerified:true,checkedAt:now-20000},
+ watchdog:{armed:false,approval:'NOT_APPROVED',parked:true,checkedAt:now-25000},
  nowMs:now
 });
 const block=(v,reason)=>{
@@ -94,9 +96,35 @@ test('watchdog parked, approval not granted, expiry never armed',()=>{
   block(x,'WATCHDOG_PARKED_UNVERIFIED');
  }
 });
-test('stale or same UTC day owner review and invalid clocks rejected',()=>{
+test('wrong UTC day and invalid clocks are rejected',()=>{
  const x=proof();x.nowMs=Date.UTC(2026,9,24,22,0);
- block(x,'OWNER_REVIEW_UNVERIFIED');
+ block(x,'SAFE_OFF_EVIDENCE_STALE_OR_MISSING');
  const y=proof();y.nowMs=0;
  block(y,'CLOCK_UNVERIFIED');
+});
+
+test('budget is NEVER implicitly zero; wrong day, stale or pending spend blocks',()=>{
+ for(const change of [
+  {dailyReserved:undefined},{dailyReserved:null},{dailyReserved:'0'},
+  {dailyReserved:1},{dailyReserved:-1},{dailyCap:18},{dailyCap:undefined},
+  {budgetUtcDay:'2026-10-24'},{budgetUtcDay:undefined},
+  {budgetCheckedAt:now-6*60*1000},{budgetCheckedAt:now+1000}
+ ]){
+  const x=proof();Object.assign(x,change);
+  block(x,'CURRENT_UTC_DAY_BUDGET_UNVERIFIED');
+ }
+});
+test('latest snapshot, baseline, and watchdog must be recent and observed',()=>{
+ for(const patch of [
+  {snapshotCheckedAt:undefined},{snapshotCheckedAt:now-6*60*1000},
+  {snapshotCheckedAt:now+1}
+ ]){
+  const x=proof();Object.assign(x,patch);block(x,'SAFE_OFF_EVIDENCE_STALE_OR_MISSING');
+ }
+ for(const key of ['deployment','watchdog']){
+  for(const timestamp of [undefined,now-10*60*1000,now+1000]){
+   const x=proof();x[key].checkedAt=timestamp;
+   block(x,'SAFE_OFF_EVIDENCE_STALE_OR_MISSING');
+  }
+ }
 });
