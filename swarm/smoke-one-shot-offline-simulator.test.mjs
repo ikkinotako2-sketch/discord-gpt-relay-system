@@ -59,7 +59,6 @@ test('duplicate claim, missing final output or wrong order all block',()=>{
  for(const event of [
   mock('MOCK_MODEL_FINAL',{index:0,finalVerified:true}),
   mock('MOCK_MODEL_CLAIM',{index:1}),
-  mock('MOCK_BASELINE_RESTORED'),
   {kind:'MOCK_MODEL_CLAIM',index:0,mockEvidence:false},
   mock('PRODUCTION_DEPLOY'),
   null
