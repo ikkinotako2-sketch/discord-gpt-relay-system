@@ -39,6 +39,15 @@ export async function capturePreservedUnknownReadOnly({d1ReadToken,fetchImpl=fet
  if(budget.length!==1||!safeInt(budget[0]?.reserved))
   throw Error('CURRENT_UTC_DAY_BUDGET_UNVERIFIED');
  const row=Object.fromEntries(FIELDS.map(k=>[k,rows[0][k]]));
+ // Immutable fingerprint is from the independently verified 2026-10-24
+ // Discord-only audit. A changed row is BLOCKED; never reclassify or repair.
+ if(row.status!=='unknown'||row.calls_used!==1||row.cycles!==1||
+    row.stop_requested!==0||row.active_slot!==null||
+    row.last_error!=='MODEL_OUTCOME_UNKNOWN'||
+    row.created_at!==1792838702623||row.updated_at!==1792838752941||
+    row.history_length!==2||row.checkpoint_length!==0||
+    nowMs<row.updated_at)
+   throw Error('HISTORICAL_UNKNOWN_ROW_CHANGED_OR_UNVERIFIED');
  return {
   checkedAt:nowMs,utcDay:day,rows:[row],
   dailyReserved:budget[0].reserved,dailyCap:6,
