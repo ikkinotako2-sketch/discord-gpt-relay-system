@@ -12,7 +12,7 @@ const row={
 };
 const opts=()=>({
  primaryReadToken:'fake-primary-read-token',watchdogReadToken:'fake-watchdog-read-token',
- d1ReadToken:'fake-d1-read-token',nowMs:NOW
+ d1ReadToken:'fake-d1-read-token',nowMs:NOW,clock:()=>NOW
 });
 function mock({daily=0,extraUnknown=0,changedRow={},flagOn=null,armed=false,
  ownerLogin='ikkinotako2-sketch',mutatingRows=false,showSecrets=true}={}){
@@ -108,4 +108,18 @@ test('bad or missing credentials initiate zero remote calls',async()=>{
  const m=mock();
  const r=await collectReviewedUnknownSafeOff({...opts(),d1ReadToken:null,fetchImpl:m.fetchImpl,githubFetchImpl:m.fetchImpl});
  assert.equal(r.status,'BLOCKED');assert.equal(m.requests.length,0);
+});
+
+test('stale collection and caller-forged timestamp must fail closed',async()=>{
+ const start=mock();
+ const rejectStart=await collectReviewedUnknownSafeOff({...opts(),
+  clock:()=>NOW+6*60*1000,fetchImpl:start.fetchImpl,githubFetchImpl:start.fetchImpl});
+ assert.equal(rejectStart.reason,'START_CLOCK_OR_EVIDENCE_STALE');
+ assert.equal(start.requests.length,0);
+ const later=mock();let n=0;
+ const rejectEnd=await collectReviewedUnknownSafeOff({...opts(),
+  clock:()=>++n===1?NOW:NOW+6*60*1000,
+  fetchImpl:later.fetchImpl,githubFetchImpl:later.fetchImpl});
+ assert.equal(rejectEnd.reason,'READ_ONLY_EVIDENCE_EXPIRED_DURING_COLLECTION');
+ assert.equal(rejectEnd.authorizesLiveActions,false);
 });
