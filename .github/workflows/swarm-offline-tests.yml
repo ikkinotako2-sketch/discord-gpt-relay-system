@@ -23,7 +23,7 @@ jobs:
       - name: Protect existing Discord, YouTube and Project Love Machine paths
         run: node swarm/verify-isolation.mjs
       - name: Run six-agent SQLite state machine tests (NO CLOUDFLARE)
-        run: node --test swarm/smoke-owner-approval.test.mjs swarm/smoke-historical-evidence-readonly.test.mjs swarm/smoke-reviewed-unknown-safe-off.test.mjs swarm/smoke-readonly-collector.test.mjs swarm/smoke-live-preflight.test.mjs swarm/model-result-diagnostics.test.mjs swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs swarm/schema-readiness.test.mjs
+        run: node --test swarm/smoke-owner-approval.test.mjs swarm/smoke-historical-evidence-readonly.test.mjs swarm/smoke-reviewed-unknown-safe-off.test.mjs swarm/smoke-reviewed-unknown-safe-off-collector.test.mjs swarm/smoke-readonly-collector.test.mjs swarm/smoke-live-preflight.test.mjs swarm/model-result-diagnostics.test.mjs swarm/engine.test.mjs swarm/runner.test.mjs swarm/api.test.mjs swarm/portal.test.mjs swarm/quota.test.mjs swarm/cron.test.mjs swarm/handoff.test.mjs swarm/schema-readiness.test.mjs
       - name: Validate staged Workers AI adapter and neon HTML source
         run: |
           node --check swarm/engine.mjs
@@ -32,6 +32,7 @@ jobs:
           node --check swarm/smoke-owner-approval.mjs
           node --check swarm/smoke-historical-evidence-readonly.mjs
           node --check swarm/smoke-reviewed-unknown-safe-off.mjs
+          node --check swarm/smoke-reviewed-unknown-safe-off-collector.mjs
           node --check swarm/smoke-readonly-collector.mjs
           node --check swarm/api.mjs
           node --check swarm/portal.mjs
