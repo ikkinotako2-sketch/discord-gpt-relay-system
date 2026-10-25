@@ -77,6 +77,35 @@ jobs:
           console.log('GRAPHQL_GROUP_ROWS='+groups.length);
           console.log('GRAPHQL_TOTAL_NEURONS_METRIC_TYPE='+(groups[0]&&groups[0].sum?typeof groups[0].sum.totalNeurons:'MISSING'));
           console.log('GRAPHQL_GROUP_COUNT_TYPE='+(groups[0]?typeof groups[0].count:'MISSING'));
+          if(groups.length===0){
+            // Cross-check that an earlier UTC day with a known model attempt
+            // is visible to the same account analytics query. This is READ ONLY.
+            const oldQuery='query PriorAiNeurons($accountTag: string!, $start: Time!, $end: Time!){viewer{accounts(filter:{accountTag:$accountTag}){aiInferenceAdaptiveGroups(limit:1,filter:{datetime_gt:$start,datetime_lt:$end}){count sum{totalNeurons}}}}}';
+            try{
+              const old=await fetch('https://api.cloudflare.com/client/v4/graphql',{
+                method:'POST',
+                headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+                body:JSON.stringify({query:oldQuery,variables:{
+                  accountTag,start:'2026-10-24T00:00:00Z',end:'2026-10-25T00:00:00Z'}}),
+                signal:AbortSignal.timeout(14000)
+              });
+              console.log('GRAPHQL_PRIOR_DAY_HTTP='+old.status);
+              if(old.status===200){
+                const payload=await old.json();
+                if(payload.errors?.length)console.log('GRAPHQL_PRIOR_DAY=SCHEMA_OR_ACCESS_ERROR');
+                else{
+                  const ar=payload?.data?.viewer?.accounts?.[0]?.aiInferenceAdaptiveGroups;
+                  console.log('GRAPHQL_PRIOR_DAY_GROUP_ROWS='+(Array.isArray(ar)?ar.length:'UNVERIFIED'));
+                  const sum=Array.isArray(ar)&&ar.length===1?ar[0]?.sum?.totalNeurons:null;
+                  const requests=Array.isArray(ar)&&ar.length===1?ar[0]?.count:null;
+                  console.log('GRAPHQL_PRIOR_DAY_NEURON_SUM='+
+                    (typeof sum==='number'&&Number.isFinite(sum)&&sum>=0?sum:'UNVERIFIED'));
+                  console.log('GRAPHQL_PRIOR_DAY_INFERENCE_COUNT='+
+                    (Number.isSafeInteger(requests)&&requests>=0?requests:'UNVERIFIED'));
+                }
+              }
+            }catch{console.log('GRAPHQL_PRIOR_DAY=READ_UNVERIFIED');}
+          }
           if(groups.length!==1||typeof groups[0]?.sum?.totalNeurons!=='number'||
              !Number.isFinite(groups[0].sum.totalNeurons)||groups[0].sum.totalNeurons<0){
             console.log('GRAPHQL_READ=NEURON_AGGREGATE_UNVERIFIED');
