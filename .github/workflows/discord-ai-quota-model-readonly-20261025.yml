@@ -1,0 +1,82 @@
+name: Discord AI Quota Model Metadata Read-Only 20261025
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261025-once]
+    paths: ['.github/workflows/discord-ai-quota-model-readonly-20261025.yml']
+permissions: {contents: read}
+concurrency:
+  group: discord-ai-quota-model-metadata-readonly-20261025
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: eeeebd6665e2384f32ed0a8e8014fd29ada29e0f
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test historical UNKNOWN and fail-closed gates OFFLINE
+        run: |
+          node --test swarm/smoke-live-preflight.test.mjs swarm/smoke-unknown-review.test.mjs swarm/smoke-owner-approval.test.mjs swarm/model-result-diagnostics.test.mjs
+      - name: Account-scoped GET-only Workers AI model and historical usage inspection
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {GPT_OSS_MODEL} from './loop-quality.mjs';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          const day='2026-10-25';
+          if(new Date().toISOString().slice(0,10)!==day)throw Error('PINNED_UTC_DATE_MISMATCH');
+          if(!token)throw Error('CLOUDFLARE_READ_TOKEN_MISSING');
+          if(GPT_OSS_MODEL!=='@cf/openai/gpt-oss-20b')throw Error('MODEL_PIN_CHANGED');
+          const api='https://api.cloudflare.com/client/v4/accounts/'+account;
+          const controller=new AbortController();
+          const timeout=setTimeout(()=>controller.abort(),14000);
+          async function safeGet(path){
+            try{
+              const r=await fetch(api+path,{method:'GET',
+                headers:{Authorization:'Bearer '+token},signal:controller.signal});
+              if(r.status!==200)return {status:'HTTP_'+r.status};
+              const data=await r.json();
+              if(data?.success!==true)return {status:'RESPONSE_UNVERIFIED'};
+              return {status:'SUCCESS',data};
+            }catch{return {status:'REQUEST_UNVERIFIED'};}
+          }
+          // Both HTTP methods below are GET; no inference endpoint is accessed.
+          const modelPath='/ai/models/search?search='+encodeURIComponent('gpt-oss-20b')+'&per_page=100';
+          const usagePath='/billable/usage?from=2026-10-25&to=2026-10-25';
+          const [model,usage]=await Promise.all([safeGet(modelPath),safeGet(usagePath)]);
+          clearTimeout(timeout);
+          let found=false;
+          if(model.status==='SUCCESS'){
+            const arr=Array.isArray(model.data?.result)?model.data.result:[];
+            found=arr.some(m=>m?.name===GPT_OSS_MODEL||m?.id===GPT_OSS_MODEL||
+              m?.model===GPT_OSS_MODEL);
+            console.log('GPT_OSS_20B_CATALOG_MATCH='+found);
+            console.log('GPT_OSS_CATALOG_ACCESS=SUCCESS');
+          }else console.log('GPT_OSS_CATALOG_ACCESS='+model.status);
+          // Billable usage is restricted and daily/delayed: never equate this
+          // with realtime remaining Neurons or an account-wide quota reservation.
+          console.log('AI_BILLABLE_USAGE_GET='+usage.status);
+          if(usage.status==='SUCCESS'){
+            const rows=Array.isArray(usage.data?.result)?usage.data.result:[];
+            const neurons=rows.filter(x=>
+              typeof x?.ConsumedUnit==='string'&&/neurons?/i.test(x.ConsumedUnit)&&
+              typeof x?.ChargePeriodStart==='string'&&x.ChargePeriodStart.startsWith(day));
+            const quantities=neurons.map(x=>x.ConsumedQuantity);
+            if(neurons.length>0&&quantities.every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0))
+              console.log('AI_DAILY_BILLABLE_NEURON_ROWS_SUM='+quantities.reduce((a,b)=>a+b,0));
+            else console.log('AI_DAILY_BILLABLE_NEURONS=UNVERIFIED');
+          }
+          console.log('ACCOUNT_WIDE_REALTIME_FREE_NEURONS=UNVERIFIED');
+          console.log('PROVIDER_MODEL_INVOCATION=NOT_EXECUTED');
+          console.log('PRODUCTION_CHANGES=NONE');
+          console.log('AUTHORIZES_LIVE_ACTIONS=false');
+          NODE
