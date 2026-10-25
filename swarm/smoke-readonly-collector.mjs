@@ -3,6 +3,8 @@
 // Cloudflare token + D1 Read token must be injected at execution time, never committed.
 import {createDiscordCloudflareClient} from './smoke-restore-executor.mjs';
 import {createDiscordD1ReadClient} from './smoke-watchdog-d1.mjs';
+import {capturePreservedUnknownReadOnly,DISCORD_UNKNOWN_OWNER_COMMENT} from './smoke-historical-evidence-readonly.mjs';
+import {verifyUnknownReviewComment} from './smoke-owner-approval.mjs';
 import {DISCORD_SMOKE_TARGET,FLAGS} from './smoke-restore-guard.mjs';
 import {assessDiscordSmokePreflight,LIVE_READINESS_GATES} from './smoke-live-preflight.mjs';
 
@@ -37,7 +39,7 @@ export async function collectDiscordSmokeReadiness({
  const evidence={
   target:{...DISCORD_SMOKE_TARGET},checkedAt:nowMs,
   versions:{baseline:baselineVersion,smoke:smokeVersion,deployment:null,active:null},
-  remoteBindings:null,jobs:null,githubActiveRuns:null,account:safeAccount(accountEvidence),
+  remoteBindings:null,jobs:null,historicalUnknown:null,githubActiveRuns:null,account:safeAccount(accountEvidence),
   deadlineMs:null,
   gates:Object.fromEntries(LIVE_READINESS_GATES.map(x=>[x,false]))
  };
@@ -60,6 +62,23 @@ export async function collectDiscordSmokeReadiness({
    const s=await d1.snapshot();
    evidence.jobs={legacyActive:s.legacyActive,swarmActive:s.swarmActive,
     unknownJobs:s.unknownJobs,pendingStop:s.pendingStop};
+   if(s.unknownJobs===1&&s.legacyActive===0&&s.swarmActive===0&&s.pendingStop===0){
+    try{
+     const h=await capturePreservedUnknownReadOnly({d1ReadToken,fetchImpl,nowMs});
+     const row=h.rows[0];
+     const owner=await verifyUnknownReviewComment({
+      ownerApprovalReference:DISCORD_UNKNOWN_OWNER_COMMENT,
+      unknownCreatedAt:row.created_at,unknownUpdatedAt:row.updated_at,
+      nowMs,fetchImpl:githubFetchImpl
+     });
+     evidence.historicalUnknown={
+      rows:h.rows,dailyReserved:h.dailyReserved,dailyCap:h.dailyCap,
+      utcDay:h.utcDay,ownerCommentVerified:owner.ownerCommentVerified===true,
+      review:owner.ownerCommentVerified===true?owner.review:null
+     };
+     if(owner.ownerCommentVerified!==true)failed('HISTORICAL_OWNER_COMMENT_UNVERIFIED');
+    }catch{failed('HISTORICAL_READ_ONLY_EVIDENCE_UNVERIFIED');}
+   }
   }catch{failed('DISCORD_D1_READ_FAILED');}
  }else failed('DISCORD_D1_READ_CREDENTIAL_MISSING');
  if(typeof githubFetchImpl!=='function')failed('GITHUB_READ_CLIENT_MISSING');
