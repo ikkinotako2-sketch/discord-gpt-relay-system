@@ -118,3 +118,50 @@ test('mock receipts never become an execution authorizer',()=>{
  assert.equal(forged.phase,'BLOCKED');
  assert.equal(forged.authorizesLiveActions,false);
 });
+
+test('independent restore after model UNKNOWN preserves uncertain result, never 6/6',()=>{
+ let s=ready();
+ s=advance(s,'MOCK_MODEL_CLAIM',now+50,{index:0});
+ s=advance(s,'MOCK_PROVIDER_RESULT_UNKNOWN',now+55,{index:0});
+ assert.equal(s.phase,'UNCERTAIN_MANUAL_RECOVERY');
+ s=advance(s,'MOCK_BASELINE_RESTORED',expiry+1000);
+ assert.equal(s.phase,'RESTORE_VERIFIED');
+ assert.equal(s.uncertain,true);
+ s=advance(s,'MOCK_WATCHDOG_PARKED',expiry+2000);
+ assert.equal(s.phase,'RESTORED_WITH_UNKNOWN');
+ assert.equal(s.completions,0);
+ assert.equal(s.claims,1);
+ assert.equal(s.authorizesLiveActions,false);
+});
+test('in-flight claim interrupted by rollback is unknown, not a successful call',()=>{
+ let s=ready();
+ s=advance(s,'MOCK_MODEL_CLAIM',now+50,{index:0});
+ s=advance(s,'MOCK_BASELINE_RESTORED',now+60);
+ assert.equal(s.phase,'RESTORE_VERIFIED');
+ assert.equal(s.uncertain,true);
+ s=advance(s,'MOCK_WATCHDOG_PARKED',now+70);
+ assert.equal(s.phase,'RESTORED_WITH_UNKNOWN');
+ assert.equal(s.completions,0);
+});
+test('early rollback safely ends incomplete without claiming full completion',()=>{
+ let s=ready();
+ s=advance(s,'MOCK_MODEL_CLAIM',now+50,{index:0});
+ s=advance(s,'MOCK_MODEL_FINAL',now+60,{index:0,finalVerified:true});
+ assert.equal(s.completions,1);
+ s=advance(s,'MOCK_BASELINE_RESTORED',now+70);
+ s=advance(s,'MOCK_WATCHDOG_PARKED',now+80);
+ assert.equal(s.phase,'RESTORED_INCOMPLETE');
+ assert.equal(s.completions,1);
+ assert.equal(s.authorizesLiveActions,false);
+});
+test('stale or duplicate restore receipt never retries a provider-side operation',()=>{
+ let s=ready();
+ s=advance(s,'MOCK_MODEL_CLAIM',now+50,{index:0});
+ s=advance(s,'MOCK_PROVIDER_RESULT_UNKNOWN',now+60,{index:0});
+ const over=advance(s,'MOCK_BASELINE_RESTORED',expiry+20*60*1000+1);
+ assert.equal(over.phase,'BLOCKED');
+ s=advance(s,'MOCK_BASELINE_RESTORED',expiry+1000);
+ const duplicate=advance(s,'MOCK_BASELINE_RESTORED',expiry+2000);
+ assert.equal(duplicate.phase,'BLOCKED');
+ assert.equal(duplicate.authorizesLiveActions,false);
+});
