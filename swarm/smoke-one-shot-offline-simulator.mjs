@@ -58,7 +58,8 @@ export function applyOfflineOneShotEvent(state,event,nowMs){
      (state.completions===MAX_CALLS?null:'INCOMPLETE_SIX_CALL_ABORTED')),
    nowMs});
  }
- if(nowMs>state.expiryMs)
+ if(nowMs>state.expiryMs&&!(kind==='MOCK_WATCHDOG_PARKED'&&
+   state.phase==='RESTORE_VERIFIED'&&nowMs<=state.expiryMs+20*60*1000))
   return deny(state,'DEADLINE_OR_CLOCK_INVALID_MANUAL_REVIEW');
  // All actions here are fictional receipts: never drive a live side effect.
  if(state.phase==='SAFE_OFF'&&kind==='MOCK_WATCHDOG_PREARMED')
