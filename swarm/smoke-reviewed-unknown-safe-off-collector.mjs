@@ -42,10 +42,16 @@ async function cfGet(worker,suffix,token,fetchImpl){
 }
 export async function collectReviewedUnknownSafeOff({
  primaryReadToken,watchdogReadToken,d1ReadToken,
- fetchImpl=fetch,githubFetchImpl=fetch,nowMs=Date.now()
+ fetchImpl=fetch,githubFetchImpl=fetch,nowMs=Date.now(),clock=Date.now
 }={}){
- if(!Number.isSafeInteger(nowMs)||nowMs<1e12)
+ if(!Number.isSafeInteger(nowMs)||nowMs<1e12||typeof clock!=='function')
   return denied('CLOCK_UNVERIFIED');
+ // Do not accept a caller-selected timestamp unrelated to the actual clock.
+ let start;
+ try{start=clock();}catch{return denied('CLOCK_UNVERIFIED');}
+ if(!Number.isSafeInteger(start)||start<nowMs||
+    start-nowMs>5*60*1000)
+  return denied('START_CLOCK_OR_EVIDENCE_STALE');
  if([primaryReadToken,watchdogReadToken,d1ReadToken].some(
   x=>typeof x!=='string'||x.length<8
  )||typeof fetchImpl!=='function'||typeof githubFetchImpl!=='function')
@@ -95,6 +101,11 @@ export async function collectReviewedUnknownSafeOff({
   const final=await d1.snapshot();
   if(JSON.stringify(initial)!==JSON.stringify(final))
    return denied('D1_SNAPSHOTS_CHANGED_DURING_READ');
+  let completedAt;
+  try{completedAt=clock();}catch{return denied('CLOCK_UNVERIFIED');}
+  if(!Number.isSafeInteger(completedAt)||completedAt<nowMs||
+     completedAt-nowMs>5*60*1000)
+   return denied('READ_ONLY_EVIDENCE_EXPIRED_DURING_COLLECTION');
   // No account-wide Workers AI quota or permission is inferred here.
   const result=assessReviewedUnknownSafeOff({
    target:DISCORD_SMOKE_TARGET,snapshot:final,
@@ -105,10 +116,10 @@ export async function collectReviewedUnknownSafeOff({
    remoteBindings:baseline.resources.bindings,
    deployment:{baselineActive:true,percentage:100,deploymentIdVerified:true,checkedAt:nowMs},
    watchdog:{armed:false,approval:'NOT_APPROVED',parked:true,checkedAt:nowMs},
-   nowMs
+   nowMs:completedAt
   });
   return {...result,source:'GET_AND_SELECT_ONLY_NONATOMIC_SNAPSHOT',
-   checkedAt:nowMs,accountWideFreeNeurons:'UNVERIFIED',
+   checkedAt:completedAt,accountWideFreeNeurons:'UNVERIFIED',
    modelAccess:'UNVERIFIED',realRollback:'UNVERIFIED',
    authorizesLiveActions:false};
  }catch{
