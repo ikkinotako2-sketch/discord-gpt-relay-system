@@ -6,11 +6,12 @@ import {HISTORICAL_UNKNOWN_FINGERPRINT as OLD}
  from './smoke-reviewed-unknown-safe-off.mjs';
 
 const MAX_CALLS=6;
-const TERMINAL=new Set(['COMPLETE','BLOCKED','UNCERTAIN_MANUAL_RECOVERY']);
+const TERMINAL=new Set(['COMPLETE','BLOCKED','RESTORED_WITH_UNKNOWN','RESTORED_INCOMPLETE']);
 const phases=Object.freeze([
  'SAFE_OFF','WATCHDOG_PREARMED','NON_SERVING_VERSION_STAGED',
  'SWITCHED_ONCE','OWNER_TASK_AUTHENTICATED','MODEL_CLAIMED',
- 'RESTORE_VERIFIED','COMPLETE','BLOCKED','UNCERTAIN_MANUAL_RECOVERY'
+ 'RESTORE_VERIFIED','COMPLETE','RESTORED_WITH_UNKNOWN',
+ 'RESTORED_INCOMPLETE','BLOCKED','UNCERTAIN_MANUAL_RECOVERY'
 ]);
 const nonneg=x=>Number.isSafeInteger(x)&&x>=0;
 const deny=(s,reason)=>({...s,phase:'BLOCKED',reason,authorizesLiveActions:false});
@@ -38,11 +39,27 @@ export function applyOfflineOneShotEvent(state,event,nowMs){
  if(!state||state.mode!=='OFFLINE_SIMULATION_ONLY'||state.authorizesLiveActions!==false)
   return {phase:'BLOCKED',reason:'UNTRUSTED_OR_NONOFFLINE_STATE',authorizesLiveActions:false};
  if(TERMINAL.has(state.phase))return deny(state,'TERMINAL_STATE_CANNOT_RESTART');
- if(!nonneg(nowMs)||nowMs<state.nowMs||nowMs>state.expiryMs)
+ if(!nonneg(nowMs)||nowMs<state.nowMs)
   return deny(state,'DEADLINE_OR_CLOCK_INVALID_MANUAL_REVIEW');
  if(event===null||typeof event!=='object'||event.mockEvidence!==true)
   return deny(state,'MOCK_EVENT_UNVERIFIED');
  const kind=event.kind;
+ // A mock independently verified restore receipt can arrive AFTER the expiry.
+ // It never executes a fallback API POST; no status is treated as 6/6 success
+ // unless all six previous mock call finals were confirmed.
+ if(kind==='MOCK_BASELINE_RESTORED'&&state.switched&&!state.restoreSeen&&
+    nowMs<=state.expiryMs+20*60*1000&&
+    ['SWITCHED_ONCE','OWNER_TASK_AUTHENTICATED','MODEL_CLAIMED',
+     'UNCERTAIN_MANUAL_RECOVERY'].includes(state.phase)){
+  return copy(state,{phase:'RESTORE_VERIFIED',restoreSeen:true,
+   uncertain:state.uncertain||state.phase==='MODEL_CLAIMED',
+   reason:state.phase==='MODEL_CLAIMED'?'INFLIGHT_MODEL_UNCERTAIN_DO_NOT_RETRY':
+    (state.uncertain?'MODEL_OUTCOME_UNKNOWN_NO_RETRY':
+     (state.completions===MAX_CALLS?null:'INCOMPLETE_SIX_CALL_ABORTED')),
+   nowMs});
+ }
+ if(nowMs>state.expiryMs)
+  return deny(state,'DEADLINE_OR_CLOCK_INVALID_MANUAL_REVIEW');
  // All actions here are fictional receipts: never drive a live side effect.
  if(state.phase==='SAFE_OFF'&&kind==='MOCK_WATCHDOG_PREARMED')
   return copy(state,{phase:'WATCHDOG_PREARMED',nowMs});
@@ -74,11 +91,9 @@ export function applyOfflineOneShotEvent(state,event,nowMs){
   return copy(state,{phase:'UNCERTAIN_MANUAL_RECOVERY',uncertain:true,nowMs,
    reason:'MODEL_OUTCOME_UNKNOWN_NO_RETRY'});
  }
- if(state.phase==='SWITCHED_ONCE'&&state.completions===MAX_CALLS&&
-    kind==='MOCK_BASELINE_RESTORED')
-  return copy(state,{phase:'RESTORE_VERIFIED',restoreSeen:true,nowMs});
  if(state.phase==='RESTORE_VERIFIED'&&kind==='MOCK_WATCHDOG_PARKED')
-  return copy(state,{phase:'COMPLETE',nowMs});
+  return copy(state,{phase:state.uncertain?'RESTORED_WITH_UNKNOWN':
+    (state.completions===MAX_CALLS?'COMPLETE':'RESTORED_INCOMPLETE'),nowMs});
  return deny(state,'OUT_OF_ORDER_OR_UNRECOGNIZED_MOCK_EVENT');
 }
 // Pure report: never converts simulation into execution permission.
