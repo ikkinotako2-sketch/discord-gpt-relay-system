@@ -17,9 +17,20 @@ function fingerprintMatches(row){
 }
 export function assessReviewedUnknownSafeOff({
  snapshot,rows,review,ownerCommentVerified,
- target,remoteBindings,deployment,watchdog,nowMs=Date.now()
+ dailyReserved,dailyCap,budgetUtcDay,budgetCheckedAt,
+ snapshotCheckedAt,target,remoteBindings,deployment,watchdog,nowMs=Date.now()
 }={}){
  if(!valid(nowMs)||nowMs<1e12)return fail('CLOCK_UNVERIFIED');
+ // Never assume a zero budget reservation or a fresh snapshot. Both must
+ // be independently collected for THIS UTC day; stale/missing evidence blocks.
+ const today=new Date(nowMs).toISOString().slice(0,10);
+ const fresh=t=>valid(t)&&t<=nowMs&&nowMs-t<=5*60*1000;
+ if(!fresh(snapshotCheckedAt)||!fresh(deployment?.checkedAt)||
+    !fresh(watchdog?.checkedAt))
+  return fail('SAFE_OFF_EVIDENCE_STALE_OR_MISSING');
+ if(!fresh(budgetCheckedAt)||budgetUtcDay!==today||
+    !valid(dailyReserved)||dailyReserved!==0||dailyCap!==6)
+  return fail('CURRENT_UTC_DAY_BUDGET_UNVERIFIED');
  if(target?.accountId!==DISCORD_SMOKE_TARGET.accountId||
     target?.worker!==DISCORD_SMOKE_TARGET.worker||
     target?.databaseId!==DISCORD_SMOKE_TARGET.databaseId)
@@ -33,7 +44,7 @@ export function assessReviewedUnknownSafeOff({
  // assessHistoricalUnknown validates reviewedAt, URL format, the exact D1
  // record's original timestamps, and today's UTC day; it does NOT grant AI.
  const reviewed=assessHistoricalUnknown({
-  snapshot,rows,review,nowMs,dailyReserved:0,dailyCap:6
+  snapshot,rows,review,nowMs,dailyReserved,dailyCap
  });
  if(reviewed.status!=='REVIEWED_HISTORICAL_UNKNOWN_NEEDS_ALL_LIVE_PREFLIGHTS')
   return fail('OWNER_REVIEW_UNVERIFIED');
@@ -55,6 +66,9 @@ export function assessReviewedUnknownSafeOff({
  if(watchdog?.armed!==false||watchdog?.approval!=='NOT_APPROVED'||
     watchdog?.parked!==true)
   return fail('WATCHDOG_PARKED_UNVERIFIED');
+ // If called with unverified caller-supplied booleans, this remains only a
+ // candidate verdict. It is NEVER release authority; a trusted live collector
+ // must independently verify timestamps and provenance.
  // Does not prove a new smoke completed or reserve upstream free Neurons.
  // Runtime wiring and real rollback/owner authorization are separate gates.
  return {
