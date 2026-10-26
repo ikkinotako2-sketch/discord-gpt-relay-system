@@ -121,7 +121,7 @@ test('anonymous, signed-cookie tamper and expired OAuth session are rejected',as
  const f=await authFixture();try{
   let r=await handle(f,{headers:{Cookie:''}});
   assert.equal(r.status,401);
-  r=await handle(f,{headers:{Cookie:'dc_session='+f.cookie.slice(0,-1)+'A'}});
+  r=await handle(f,{headers:{Cookie:'dc_session='+f.cookie.slice(0,-1)+(f.cookie.endsWith('A')?'B':'A')}});
   assert.equal(r.status,401);
   r=await handleSmokeOwnerPrepare(request(f),f.env,{...f.deps,clock:()=>NOW+61*60*1000});
   assert.equal(r.status,401);
