@@ -17,7 +17,8 @@ const exactTarget=t=>t?.accountId===DISCORD_SMOKE_TARGET.accountId&&
 function correctFlags(bindings){
  if(!Array.isArray(bindings))return false;
  const db=bindings.filter(x=>x?.name==='LOOP_DB');
- if(db.length!==1||db[0].type!=='d1'||
+ const d1=bindings.filter(x=>x?.type==='d1');
+ if(db.length!==1||d1.length!==1||db[0]!==d1[0]||db[0].type!=='d1'||
     db[0].database_id!==DISCORD_SMOKE_TARGET.databaseId)return false;
  for(const key of FLAGS){
   const entries=bindings.filter(x=>x?.name===key);
@@ -31,7 +32,10 @@ function originalUnknownMatches(row){
   Object.entries(HISTORICAL_UNKNOWN_FINGERPRINT).every(([k,v])=>row[k]===v);
 }
 function validController(s,now){
- return s?.schema==='discord-six-call.v1'&&exactTarget(s.target)&&
+ return s?.schema==='discord-six-call.v1'&&
+  typeof s.runId==='string'&&/^[A-Za-z0-9_-]{8,100}$/.test(s.runId)&&
+  typeof s.taskReceiptId==='string'&&/^[A-Za-z0-9_-]{8,100}$/.test(s.taskReceiptId)&&
+  exactTarget(s.target)&&
   UUID.test(s.baselineVersion||'')&&UUID.test(s.smokeVersion||'')&&
   s.baselineVersion!==s.smokeVersion&&validMs(s.createdAtMs)&&
   validMs(s.expiresAtMs)&&s.expiresAtMs>s.createdAtMs&&
@@ -57,7 +61,8 @@ function claimsMatch(controller,claims){
     !['FINAL_VERIFIED','CLAIMED','UNKNOWN'].includes(c.state))return false;
   if(c.state==='FINAL_VERIFIED')completed++;
   if(c.state==='CLAIMED')claimed++;
-  if(c.state==='UNKNOWN'&&controller.phase==='ACTIVE')return false;
+  if(c.state==='UNKNOWN'&&
+     (controller.phase==='ACTIVE'||i!==sorted.length-1))return false;
   if(c.state==='CLAIMED'&&c.stage_index!==controller.inFlightIndex)return false;
  }
  return completed===controller.completed&&claimed===(controller.inFlightIndex===null?0:1);
@@ -70,6 +75,9 @@ function watchdogProof(s,w,now){
     w.baselineVersion!==s.baselineVersion||w.smokeVersion!==s.smokeVersion||
     w.expiresAtMs!==s.expiresAtMs||!validMs(w.armedAtMs)||
     w.armedAtMs<s.createdAtMs||w.armedAtMs>=s.expiresAtMs||
+    !validMs(w.trafficSwitchedAtMs)||
+    w.trafficSwitchedAtMs<=w.armedAtMs||
+    w.trafficSwitchedAtMs>=s.expiresAtMs||
     w.alarmPersisted!==true||w.onceLatchPersisted!==true||
     w.independentWorkerIdentityVerified!==true||
     w.releaseSerializationHeld!==true||w.ownerRecoveryApprovalScoped!==true||
@@ -83,6 +91,7 @@ function postRestoreOK(s,p,now){
   p.target?.worker!==s.target.worker||
   p.target?.databaseId!==s.target.databaseId||
   p.baselineVersion!==s.baselineVersion||
+  !UUID.test(p.deploymentId||'')||
   p.deployedVersion!==s.baselineVersion||
   p.deployedPercentage!==100||
   p.releaseLockHeld!==true||p.signedDiscordRequestRejected401!==true||
