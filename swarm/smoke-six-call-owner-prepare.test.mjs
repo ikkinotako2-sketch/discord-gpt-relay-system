@@ -171,7 +171,8 @@ test('disabled default or any four SWARM flags ON blocks before OAuth/plan',asyn
  const f=await authFixture();try{
   for(const patch of [{SMOKE_OWNER_PREPARE_ENABLED:'false'},
    {SWARM_API_ENABLED:'true'},{SWARM_RUNNER_ENABLED:'true'},
-   {SWARM_EXECUTION_APPROVED:'true'},{SWARM_EXCLUSIVE_MODE:'true'}]){
+   {SWARM_EXECUTION_APPROVED:'true'},{SWARM_EXCLUSIVE_MODE:'true'},
+   {SWARM_DAILY_CALL_CAP:'7'},{SWARM_DAILY_CALL_CAP:'18'}]){
    const r=await handleSmokeOwnerPrepare(request(f),{...f.env,...patch},f.deps);
    assert.equal(r.status,503);
   }
