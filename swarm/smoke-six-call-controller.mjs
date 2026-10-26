@@ -43,7 +43,7 @@ function validateState(s,now){
    !Number.isSafeInteger(s.attempts)||s.attempts<0||
    s.attempts>=SMOKE_ATTEMPT_LIMIT||
    s.completed!==s.attempts||s.inFlightIndex!==null||
-   s.historicalUnknownPreserved!==true||
+   s.stopRequested===true||s.historicalUnknownPreserved!==true||
    s.authorizesInference!==false||s.authorizesDeployment!==false)
    return false;
  return true;
