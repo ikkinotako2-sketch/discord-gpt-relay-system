@@ -79,6 +79,7 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/smoke-six-call-stop-reconcile.test.mjs',
     'swarm/smoke-six-call-owner-stop.mjs',
     'swarm/smoke-six-call-owner-stop.test.mjs',
+    'swarm/smoke-six-call-owner-prepare.test.mjs',
     'swarm/verify-isolation.mjs',
     'swarm/SMOKE_SIX_CALL_SAFE_STOP_STATUS.md',
     '.github/workflows/swarm-six-call-safe-stop-offline.yml'
