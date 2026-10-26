@@ -78,7 +78,7 @@ test('STOP does not need separate AI execution permission, even when flags ON',a
 test('forged, missing, expired signed-cookie session cannot STOP',async()=>{
  const f=await setup();try{
   for(const headers of [{Cookie:''},{Cookie:'dc_session=fake.signature'},
-   {Cookie:'dc_session='+f.cookie.slice(0,-1)+'Z'}])
+   {Cookie:'dc_session='+f.cookie.slice(0,-1)+(f.cookie.endsWith('Z')?'Y':'Z')}])
    assert.equal((await stop(f,{headers})).status,401);
   const expired=await handleSmokeOwnerStop(req(f),f.env,
    {clock:()=>now+61*60000});
