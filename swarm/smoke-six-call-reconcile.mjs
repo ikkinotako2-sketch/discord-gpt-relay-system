@@ -87,7 +87,7 @@ function postRestoreOK(s,p,now){
   p.deployedPercentage!==100||
   p.releaseLockHeld!==true||p.signedDiscordRequestRejected401!==true||
   p.ownerStopRouteVerified!==true||
-  p.watchdogParked===false||p.watchdogArmed===true||
+  p.watchdogParked!==true||p.watchdogArmed!==false||
   p.activeLegacyJobs!==0||p.activeSixRoleJobs!==0||
   p.pendingStopJobs!==0||p.historicalUnknownCount!==1||
   !originalUnknownMatches(p.originalUnknown)||!correctFlags(p.remoteBindings)||
