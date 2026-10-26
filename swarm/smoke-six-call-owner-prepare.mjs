@@ -30,7 +30,7 @@ function exactSafeOffEnv(env){
  // Guard the runtime mode as an additional safety condition, not a proof of
  // actual remote Worker bindings or independent production release lock.
  return FLAGS.every(k=>env?.[k]===undefined||env[k]==='false')&&
-    env?.SWARM_DAILY_CALL_CAP!=='18';
+    (env?.SWARM_DAILY_CALL_CAP===undefined||env.SWARM_DAILY_CALL_CAP==='6');
 }
 async function strictIntent(request){
  const reported=request.headers.get('Content-Length');
