@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS swarm_smoke_control_runs (
  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 6),
  completed INTEGER NOT NULL DEFAULT 0 CHECK(completed BETWEEN 0 AND 6),
  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0),
+ stop_requested INTEGER NOT NULL DEFAULT 0 CHECK(stop_requested IN (0,1)),
  in_flight_index INTEGER CHECK(in_flight_index IS NULL OR in_flight_index BETWEEN 0 AND 5),
  created_at_ms INTEGER NOT NULL,
  updated_at_ms INTEGER NOT NULL,
@@ -62,7 +63,7 @@ BEGIN
      in_flight_index=NEW.stage_index,updated_at_ms=NEW.claimed_at_ms
  WHERE run_id=NEW.run_id AND owner_id=NEW.owner_id
    AND phase='ACTIVE' AND attempts=NEW.stage_index
-   AND completed=attempts AND in_flight_index IS NULL
+   AND completed=attempts AND stop_requested=0 AND in_flight_index IS NULL
    AND NEW.claimed_at_ms>=created_at_ms AND NEW.claimed_at_ms<expires_at_ms;
  SELECT CASE WHEN changes()<>1 THEN RAISE(ABORT,'SMOKE_CLAIM_CAS_CONFLICT') END;
 END;
@@ -77,7 +78,7 @@ BEGIN
  SET revision=revision+1,
      completed=completed+CASE WHEN NEW.state='FINAL_VERIFIED' THEN 1 ELSE 0 END,
      in_flight_index=NULL,
-     phase=CASE WHEN NEW.state='UNKNOWN' OR NEW.stage_index=5 OR
+     phase=CASE WHEN stop_requested=1 OR NEW.state='UNKNOWN' OR NEW.stage_index=5 OR
                    NEW.settled_at_ms>=expires_at_ms
                 THEN 'RESTORE_REQUIRED' ELSE 'ACTIVE' END,
      updated_at_ms=NEW.settled_at_ms
