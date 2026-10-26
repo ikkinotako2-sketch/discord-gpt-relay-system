@@ -115,11 +115,7 @@ export function createD1SixCallStore({db,runId}={}){
    const changed=await db.prepare(STOP_SQL).bind(nowMs,runId,ownerId,nowMs).first();
    const state=await read();
    if(!state)return {status:'BLOCKED',reason:'SMOKE_RUN_NOT_FOUND'};
-   if(!changed){
-    if(state.stopRequested)return {status:'STOP_ALREADY_REQUESTED',phase:state.phase,
-      restoreRequired:state.phase==='RESTORE_REQUIRED'};
-    return {status:'BLOCKED',reason:'STOP_NOT_AUTHORIZED_OR_STATE_UNVERIFIED'};
-   }
+   if(!changed)return {status:'BLOCKED',reason:'STOP_NOT_AUTHORIZED_OR_STATE_UNVERIFIED'};
    if(changed.run_id!==runId||state.stopRequested!==true||
       !['ACTIVE','RESTORE_REQUIRED','BLOCKED'].includes(state.phase))
     throw Error('STOP_WRITE_UNVERIFIED');
