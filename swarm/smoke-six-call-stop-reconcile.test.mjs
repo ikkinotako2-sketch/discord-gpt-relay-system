@@ -74,13 +74,14 @@ function receipts(n=6,uncertain=false){return Array.from({length:n},(_,i)=>({
 function watchdog(overrides={}){return{
  mode:'OFFLINE_SIMULATED_WATCHDOG_RECEIPT',target:T,
  baselineVersion:baseline,smokeVersion:smoke,expiresAtMs:expiry,
- armedAtMs:now+100,alarmPersisted:true,onceLatchPersisted:true,
+ armedAtMs:now+100,trafficSwitchedAtMs:now+200,alarmPersisted:true,onceLatchPersisted:true,
  independentWorkerIdentityVerified:true,releaseSerializationHeld:true,
  ownerRecoveryApprovalScoped:true,...overrides
 };}
 function proof(overrides={}){return{
  mode:'OFFLINE_SIMULATED_POSTRESTORE_RECEIPT',target:T,
- checkedAtMs:expiry+1000,baselineVersion:baseline,deployedVersion:baseline,
+ checkedAtMs:expiry+1000,baselineVersion:baseline,
+ deploymentId:'38c379e8-e759-4b2f-8300-e7a4c8b39b83',deployedVersion:baseline,
  deployedPercentage:100,releaseLockHeld:true,
  signedDiscordRequestRejected401:true,ownerStopRouteVerified:true,
  watchdogParked:true,watchdogArmed:false,activeLegacyJobs:0,
@@ -202,6 +203,8 @@ test('no prearmed independent alarm never passes safety check',()=>{
   watchdog({alarmPersisted:false}),
   watchdog({onceLatchPersisted:false}),
   watchdog({armedAtMs:expiry+1}),
+  watchdog({trafficSwitchedAtMs:now+50}),
+  watchdog({trafficSwitchedAtMs:expiry+1}),
   watchdog({releaseSerializationHeld:false}),
   watchdog({ownerRecoveryApprovalScoped:false}),
   watchdog({independentWorkerIdentityVerified:false}),
@@ -212,6 +215,7 @@ test('postrestore cannot declare OFF with false, missing or duplicate SWARM flag
  const good=proof();
  for(const remoteBindings of [
   null,[{name:'LOOP_DB',type:'d1',database_id:'wrong'}],
+  [...good.remoteBindings,{name:'SHADOW_DB',type:'d1',database_id:T.databaseId}],
   [...good.remoteBindings,{name:FLAGS[0],type:'plain_text',text:'true'}],
   [...good.remoteBindings,{name:FLAGS[0],type:'plain_text',text:'false'},
     {name:FLAGS[0],type:'plain_text',text:'false'}],
@@ -231,6 +235,7 @@ test('postrestore fails closed on historical UNKNOWN mutation and active D1 jobs
   {ownerStopRouteVerified:false},
   {deployedPercentage:50},{deployedVersion:smoke},
   {checkedAtMs:expiry-6*60*1000},
+  {deploymentId:'not-a-uuid'},
   {releaseLockHeld:false}
  ])assert.equal(audit(control(),receipts(6),watchdog(),proof(p)).status,
   'BLOCKED_MANUAL_REVIEW');
@@ -240,7 +245,8 @@ test('reconciliation rejects extra/missing/duplicated or unverified claimed rece
   receipts(5),[...receipts(6),{run_id:runId,stage_index:6,state:'FINAL_VERIFIED'}],
   receipts(6).map((r,i)=>({...r,stage_index:i===1?0:i})),
   receipts(6).map((r,i)=>({...r,run_id:i===1?'wrong':r.run_id})),
-  receipts(6).map((r,i)=>({...r,state:i===1?'CLAIMED':r.state}))
+  receipts(6).map((r,i)=>({...r,state:i===1?'CLAIMED':r.state})),
+  receipts(6).map((r,i)=>({...r,state:i===0?'UNKNOWN':i===5?'FINAL_VERIFIED':r.state}))
  ])assert.equal(audit(control(),bad).status,'BLOCKED_MANUAL_REVIEW');
 });
 test('no baseline proof after restore-required status does not claim success',()=>{
