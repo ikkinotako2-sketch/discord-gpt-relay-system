@@ -17,7 +17,7 @@ INSERT INTO swarm_smoke_control_claims
  SELECT r.run_id,r.attempts,r.owner_id,?,?,'CLAIMED'
  FROM swarm_smoke_control_runs AS r
  WHERE r.run_id=? AND r.revision=? AND r.attempts=?
-   AND r.phase='ACTIVE' AND r.completed=r.attempts
+   AND r.phase='ACTIVE' AND r.stop_requested=0 AND r.completed=r.attempts
    AND r.in_flight_index IS NULL AND r.attempts<6
    AND ?>=r.created_at_ms AND ?<r.expires_at_ms
    AND ?=6
@@ -41,7 +41,7 @@ UPDATE swarm_smoke_control_claims
 
 const READ_SQL=`
 SELECT run_id,owner_id,task_receipt_id,account_id,worker_name,database_id,
- baseline_version,smoke_version,phase,attempts,completed,revision,
+ baseline_version,smoke_version,phase,attempts,completed,revision,stop_requested,
  in_flight_index,created_at_ms,updated_at_ms,expires_at_ms
  FROM swarm_smoke_control_runs WHERE run_id=? LIMIT 1
 `;
@@ -55,7 +55,7 @@ function decode(row){
     !validMs(row.expires_at_ms)||!validMs(row.updated_at_ms)||
     !Number.isSafeInteger(row.attempts)||!Number.isSafeInteger(row.completed)||
     !Number.isSafeInteger(row.revision)||
-    row.revision<0||row.attempts<0||row.attempts>6||
+    row.revision<0||![0,1].includes(row.stop_requested)||row.attempts<0||row.attempts>6||
     row.completed<0||row.completed>row.attempts||
     (row.in_flight_index!==null&&
      (!Number.isSafeInteger(row.in_flight_index)||
@@ -68,6 +68,7 @@ function decode(row){
   target:{accountId:row.account_id,worker:row.worker_name,databaseId:row.database_id},
   createdAtMs:row.created_at_ms,expiresAtMs:row.expires_at_ms,
   attempts:row.attempts,completed:row.completed,revision:row.revision,
+  stopRequested:row.stop_requested===1,
   inFlightIndex:row.in_flight_index,
   historicalUnknownPreserved:true,authorizesDeployment:false,
   authorizesInference:false
@@ -89,8 +90,43 @@ export function createD1SixCallStore({db,runId}={}){
     ))throw Error('WRONG_D1_TARGET');
   return decoded;
  };
+ // Owner-scoped emergency stop: one SQLite statement is the linearization
+ // point. In-flight claims stay ACTIVE but become non-runnable; their original
+ // CAS revision is preserved for one final settlement or terminal UNKNOWN.
+ // An idle ACTIVE run goes directly to RESTORE_REQUIRED. PENDING cannot start.
+ // No provider/Cloudflare action occurs here; restore is a separate gate.
+ const STOP_SQL=`
+ UPDATE swarm_smoke_control_runs
+ SET stop_requested=1,
+  phase=CASE WHEN phase='PENDING' THEN 'BLOCKED'
+             WHEN in_flight_index IS NULL THEN 'RESTORE_REQUIRED'
+             ELSE 'ACTIVE' END,
+  revision=revision+CASE WHEN in_flight_index IS NULL THEN 1 ELSE 0 END,
+  updated_at_ms=?
+ WHERE run_id=? AND owner_id=? AND phase IN ('PENDING','ACTIVE')
+  AND stop_requested=0 AND updated_at_ms<=?
+ RETURNING run_id
+ `;
  return Object.freeze({
   read,
+  async requestStopOnce({runId:requested,ownerId,nowMs}={}){
+   if(requested!==runId||!/^[0-9]{15,22}$/.test(ownerId||'')||!validMs(nowMs))
+    throw Error('INVALID_OWNER_STOP_REQUEST');
+   const changed=await db.prepare(STOP_SQL).bind(nowMs,runId,ownerId,nowMs).first();
+   const state=await read();
+   if(!state)return {status:'BLOCKED',reason:'SMOKE_RUN_NOT_FOUND'};
+   if(!changed){
+    if(state.stopRequested)return {status:'STOP_ALREADY_REQUESTED',phase:state.phase,
+      restoreRequired:state.phase==='RESTORE_REQUIRED'};
+    return {status:'BLOCKED',reason:'STOP_NOT_AUTHORIZED_OR_STATE_UNVERIFIED'};
+   }
+   if(changed.run_id!==runId||state.stopRequested!==true||
+      !['ACTIVE','RESTORE_REQUIRED','BLOCKED'].includes(state.phase))
+    throw Error('STOP_WRITE_UNVERIFIED');
+   return {status:'STOP_RECORDED',phase:state.phase,
+    pendingInFlight:state.inFlightIndex!==null,
+    restoreRequired:state.phase==='RESTORE_REQUIRED'};
+  },
   async claimOnce({runId:requested,expectedRevision,index,expectedExpiryMs,
     nowMs,localDailyCap}={}){
    if(requested!==runId||!validMs(nowMs)||
@@ -106,7 +142,7 @@ export function createD1SixCallStore({db,runId}={}){
    if(inserted.run_id!==runId||inserted.stage_index!==index)
     throw Error('D1_INSERT_RECEIPT_INVALID');
    const state=await read();
-   if(!state||state.revision!==expectedRevision+1||
+   if(!state||state.stopRequested===true||state.revision!==expectedRevision+1||
       state.attempts!==index+1||state.completed!==index||
       state.inFlightIndex!==index||
       state.expiresAtMs!==expectedExpiryMs||
