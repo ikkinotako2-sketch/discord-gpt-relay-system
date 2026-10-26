@@ -34,7 +34,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const sixCallController=base==='feature/discord-historical-unknown-readonly-20261025'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-controller-20261026';
   const sixCallD1=base==='feature/discord-six-call-controller-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-d1-store-20261026';
   const ownerPrepare=base==='feature/discord-six-call-d1-store-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-owner-prepare-20261026';
-  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare)
+  const safeStop=base==='feature/discord-six-call-owner-prepare-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-safe-stop-reconcile-20261026';
+  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -70,7 +71,17 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/verify-isolation.mjs',
     '.github/workflows/swarm-six-call-owner-prepare-offline.yml'
   ]);
-  const illegal=paths.filter(path=>ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
+  const safeStopFiles=new Set([
+    'swarm/smoke-six-call-d1-schema.review.sql',
+    'swarm/smoke-six-call-d1-store.mjs',
+    'swarm/smoke-six-call-controller.mjs',
+    'swarm/smoke-six-call-reconcile.mjs',
+    'swarm/smoke-six-call-stop-reconcile.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_SAFE_STOP_STATUS.md',
+    '.github/workflows/swarm-six-call-safe-stop-offline.yml'
+  ]);
+  const illegal=paths.filter(path=>safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));
