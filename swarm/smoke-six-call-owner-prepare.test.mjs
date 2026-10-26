@@ -9,7 +9,7 @@ import {DISCORD_SMOKE_TARGET} from './smoke-restore-guard.mjs';
 
 const OWNER='123456789012345678';
 const NOW=Date.UTC(2026,9,26,6);
-const URL=COMMAND_CENTER_ORIGIN+SMOKE_REVIEW_PREPARE_PATH;
+const API_URL=COMMAND_CENTER_ORIGIN+SMOKE_REVIEW_PREPARE_PATH;
 const originalSql=readFileSync(new URL('./schema.sql',import.meta.url),'utf8');
 const migrate=readFileSync(new URL('./smoke-six-call-d1-schema.review.sql',import.meta.url),'utf8');
 const pendingIndex=readFileSync(new URL('./smoke-six-call-owner-prepare-index.review.sql',import.meta.url),'utf8');
@@ -49,7 +49,7 @@ async function setup(){
   loadReviewedPlan:async()=>{planCalls++;return validPlan();}};
  return {env,sqlite,cookie,deps,planCalls:()=>planCalls};
 }
-function request(f,{headers={},url=URL,method='POST',body={intent:'REVIEW_ONLY_NO_LIVE_ACTIONS'}}={}){
+function request(f,{headers={},url=API_URL,method='POST',body={intent:'REVIEW_ONLY_NO_LIVE_ACTIONS'}}={}){
  const h={
   Cookie:'dc_session='+f.cookie,Origin:COMMAND_CENTER_ORIGIN,
   'Content-Type':'application/json','X-CSRF-Token':f.csrf,
@@ -146,7 +146,7 @@ test('Origin/CSRF/content-type/fetch-site rejects before plan or D1 access',asyn
 test('unknown method, paths or queries do not create a review',async()=>{
  const f=await authFixture();try{
   assert.equal((await handle(f,{method:'GET'})).status,405);
-  assert.equal((await handle(f,{url:URL+'?override=true'})).status,404);
+  assert.equal((await handle(f,{url:API_URL+'?override=true'})).status,404);
   assert.equal((await handle(f,{url:COMMAND_CENTER_ORIGIN+'/command-center/api/swarm/create'})).status,404);
   assert.equal(count(f),0);
  }finally{f.sqlite.close();}
