@@ -1,0 +1,53 @@
+name: Discord Free-only Six Call Evidence OFFLINE (No Model Calls)
+on:
+  pull_request:
+    paths:
+      - 'swarm/smoke-free-only-planning.mjs'
+      - 'swarm/smoke-free-only-planning.test.mjs'
+      - 'swarm/SMOKE_FREE_ONLY_READINESS.md'
+      - 'swarm/verify-isolation.mjs'
+      - '.github/workflows/swarm-free-only-planning-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reject changes outside the five reviewed offline files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/free-only-paths.txt
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const allowed=new Set([
+            'swarm/smoke-free-only-planning.mjs',
+            'swarm/smoke-free-only-planning.test.mjs',
+            'swarm/SMOKE_FREE_ONLY_READINESS.md',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-free-only-planning-offline.yml'
+          ]);
+          const changes=readFileSync('/tmp/free-only-paths.txt','utf8').trim().split('\n');
+          if(changes.length!==5||changes.some(p=>!allowed.has(p))||
+             new Set(changes).size!==5)throw Error('UNREVIEWED_CHANGE_SCOPE');
+          console.log('OFFLINE_FREE_ONLY_FIVE_FILE_SCOPE_PASS');
+          NODE
+      - name: No production deployment, billing or AI inference
+        run: |
+          node --check swarm/smoke-free-only-planning.mjs
+          node --check swarm/smoke-free-only-planning.test.mjs
+          node --test swarm/smoke-free-only-planning.test.mjs \
+            swarm/smoke-six-call-free-neuron-review.test.mjs \
+            swarm/smoke-six-call-controller.test.mjs \
+            swarm/smoke-six-call-postclaim-stop.test.mjs \
+            swarm/smoke-six-call-migration-acceptance.test.mjs
+          ! grep -R "smoke-free-only-planning" worker-loop.mjs command-center/server.mjs swarm/api.mjs swarm/runner.mjs swarm/cron.mjs
+          echo 'FREE_ONLY_NO_PAID_UPGRADE_NO_AI_CALL_OFFLINE_PASS'
