@@ -44,7 +44,7 @@ export async function collectGitHubSixCallReadOnly({
   if(!candidate||Object.keys(candidate).sort().join(',')!=='head,number'||
      !Number.isSafeInteger(candidate.number)||candidate.number<=previous[0]||
      candidate.number>5000||typeof candidate.head!=='string'||
-     !/^feature\\/discord-six-call-[a-z0-9-]+-20[0-9]{6}$/.test(candidate.head)||
+     !/^feature\/discord-six-call-[a-z0-9-]+-20[0-9]{6}$/.test(candidate.head)||
      candidate.head===previous[2])
    return denied('EXTRA_DRAFT_CHAIN_UNPINNED');
   const tuple=[candidate.number,previous[2],candidate.head];
