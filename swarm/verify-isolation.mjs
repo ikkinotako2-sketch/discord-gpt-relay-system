@@ -42,7 +42,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const workerGet=base==='feature/discord-six-call-d1-readonly-audit-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-worker-get-audit-20261027';
   const crossEvidence=base==='feature/discord-six-call-worker-get-audit-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-cross-evidence-20261027';
   const ddlIntegrity=base==='feature/discord-six-call-cross-evidence-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-d1-ddl-integrity-20261027';
-  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop&&!releaseFence&&!quotaReview&&!githubReadOnly&&!d1ReadOnly&&!workerGet&&!crossEvidence&&!ddlIntegrity)
+  const postClaimStop=base==='feature/discord-six-call-d1-ddl-integrity-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-postclaim-stop-20261027';
+  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop&&!releaseFence&&!quotaReview&&!githubReadOnly&&!d1ReadOnly&&!workerGet&&!crossEvidence&&!ddlIntegrity&&!postClaimStop)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -143,7 +144,15 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/SMOKE_SIX_CALL_D1_DDL_INTEGRITY.md',
     '.github/workflows/swarm-six-call-d1-ddl-integrity-offline.yml'
   ]);
-  const illegal=paths.filter(path=>ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
+  const postClaimStopFiles=new Set([
+    'swarm/smoke-six-call-controller.mjs',
+    'swarm/smoke-six-call-postclaim-stop.test.mjs',
+    'swarm/smoke-six-call-migration-acceptance.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_POSTCLAIM_STOP_REVIEW.md',
+    '.github/workflows/swarm-six-call-postclaim-stop-offline.yml'
+  ]);
+  const illegal=paths.filter(path=>postClaimStop ? !postClaimStopFiles.has(path) : ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));
