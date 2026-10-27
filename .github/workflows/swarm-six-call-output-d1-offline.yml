@@ -10,6 +10,8 @@ on:
       - '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
       - '.github/workflows/swarm-free-only-planning-offline.yml'
       - 'swarm/verify-isolation.mjs'
+      - 'swarm/smoke-six-call-migration-acceptance.test.mjs'
+      - 'swarm/smoke-six-call-d1-readonly-audit.mjs'
 permissions:
   contents: read
 jobs:
@@ -21,7 +23,8 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Exact eight-file review scope
+      - name: Exact eight-file review scope (original PR only)
+        if: github.head_ref == 'feature/discord-six-call-output-d1-20261027'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -44,6 +47,9 @@ jobs:
              actual.some(x=>!expected.has(x)))throw Error('UNREVIEWED_SQL_OR_CODE_PATH');
           console.log('OUTPUT_D1_EIGHT_FILE_SCOPE_PASS');
           NODE
+      - name: Other PRs must pass their own scoped offline isolation
+        if: github.head_ref != 'feature/discord-six-call-output-d1-20261027'
+        run: node swarm/verify-isolation.mjs
       - name: Offline local SQLite verified output tests and six-call regressions
         run: |
           node --check swarm/smoke-six-call-output-d1.mjs
