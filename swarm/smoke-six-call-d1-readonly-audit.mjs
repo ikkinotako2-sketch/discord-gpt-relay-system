@@ -2,6 +2,7 @@
 // OFFLINE-STAGED; not connected to production. No schema apply, D1 mutation,
 // model invocation, deployment, credentials logging, or safe-to-launch decision.
 import {DISCORD_D1_URL} from './smoke-watchdog-d1.mjs';
+import {attestSixCallD1SqlDefinitions} from './smoke-six-call-d1-ddl-digest.mjs';
 
 const REQUIRED=Object.freeze({
  swarm_smoke_control_runs:'table',
@@ -12,7 +13,7 @@ const REQUIRED=Object.freeze({
  swarm_smoke_control_settle_atomic:'trigger'
 });
 export const D1_CONTROL_SCHEMA_NAMES=Object.freeze(Object.keys(REQUIRED));
-export const D1_SCHEMA_SELECT=`SELECT name,type FROM sqlite_master
+export const D1_SCHEMA_SELECT=`SELECT name,type,sql FROM sqlite_master
  WHERE name IN ('swarm_smoke_control_runs','swarm_smoke_control_claims',
  'swarm_smoke_control_one_open','swarm_smoke_control_one_pending_or_open',
  'swarm_smoke_control_claim_atomic','swarm_smoke_control_settle_atomic')
@@ -84,6 +85,8 @@ export async function collectSixCallD1ReadOnly({
   else if(seen.size!==D1_CONTROL_SCHEMA_NAMES.length)
    return deny('PARTIAL_D1_CONTROL_MIGRATION_UNSAFE');
   else{
+   if(!(await attestSixCallD1SqlDefinitions(names)))
+    return deny('D1_SQLITE_CONTROL_DDL_MISMATCH_OR_UNPINNED');
    const rows=await select(D1_STATE_SELECT);
    if(rows.length!==1||!rows[0]||typeof rows[0]!=='object')
     return deny('CONTROL_STATE_ROWS_UNVERIFIED');
@@ -111,9 +114,9 @@ export async function collectSixCallD1ReadOnly({
    return deny('D1_EVIDENCE_STALE_OR_CLOCK_ROLLBACK');
   return response(status,{checkedAtMs:end,schemaObjectCount:seen.size,
    expectedObjectCount:D1_CONTROL_SCHEMA_NAMES.length,
-   counts,sqlDefinitionsVerified:false,
+   counts,sqlDefinitionsVerified:seen.size===D1_CONTROL_SCHEMA_NAMES.length,
    originalHistoricalUnknownVerified:false,
    cloudflareAccountWideNeuronsVerified:false,
-   note:'Schema-name and count read only, not atomic, not an approval to migrate, deploy or infer.'});
+   note:'Pinned SQL definition hash + counts reviewed non-atomically. Not proof of a deployed recovery or authorization to migrate, deploy or infer.'});
  }catch{return deny('D1_READ_INCOMPLETE_OR_UNAVAILABLE');}
 }
