@@ -31,10 +31,11 @@ const migration=db=>{
  db.exec(script('smoke-six-call-d1-schema.review.sql'));
  db.exec(script('smoke-six-call-owner-prepare-index.review.sql'));
  db.exec(script('smoke-six-call-output-artifacts.review.sql'));
+ db.exec(script('smoke-six-call-owner-task-source.review.sql'));
 };
 function attest(db){
  const r=db.prepare(D1_SCHEMA_SELECT).all();
- assert.equal(r.length,7);
+ assert.equal(r.length,11);
  const actual=Object.fromEntries(r.map(x=>[
   x.name,createHash('sha256').update(x.sql).digest('hex')
  ]));
@@ -123,6 +124,28 @@ test('STOP owner must never clear or amend immutable historical UNKNOWN',()=>{
   assert.deepEqual(orig(db),original);
   assert.equal(db.prepare(`SELECT stop_requested FROM swarm_smoke_control_runs
    WHERE run_id=?`).get(RUN).stop_requested,1);
+ }finally{db.close();}
+});
+test('owner task insert is PENDING-only and immutable; historical UNKNOWN unchanged',()=>{
+ const db=new DatabaseSync(':memory:');try{
+  legacy(db);const original=orig(db);migration(db);attest(db);
+  add(db,RUN,'PENDING');
+  db.prepare(`INSERT INTO swarm_smoke_control_owner_tasks
+   (run_id,owner_id,task_receipt_id,original_task,created_at_ms)
+   VALUES(?,?,?,?,?)`).run(RUN,owner,RUN+'_receipt','original task',now);
+  assert.throws(()=>db.prepare(
+   "UPDATE swarm_smoke_control_owner_tasks SET original_task='changed'").run(),
+   /OWNER_TASK_IMMUTABLE_NO_UPDATE/);
+  assert.throws(()=>db.prepare(
+   'DELETE FROM swarm_smoke_control_owner_tasks').run(),
+   /OWNER_TASK_IMMUTABLE_NO_DELETE/);
+  db.prepare("UPDATE swarm_smoke_control_runs SET phase='ACTIVE' WHERE run_id=?").run(RUN);
+  assert.throws(()=>db.prepare(`INSERT INTO swarm_smoke_control_owner_tasks
+   (run_id,owner_id,task_receipt_id,original_task,created_at_ms)
+   VALUES(?,?,?,?,?)`).run(RUN,owner,'wrong_receipt','injection',now),
+   /UNIQUE|OWNER_TASK_NOT_PINNED_PENDING_RUN/);
+  assert.deepEqual(orig(db),original);
+  assert.equal(integrity(db),'ok');
  }finally{db.close();}
 });
 test('pinned DDL detects weakened cap even when object NAME remains unchanged',()=>{
