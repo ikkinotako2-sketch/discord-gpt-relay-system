@@ -1,0 +1,125 @@
+name: Discord Account-wide Workers AI Neurons GraphQL READ ONLY 20261027
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261027-once]
+    paths:
+      - .github/workflows/discord-account-neurons-graphql-readonly-20261027.yml
+permissions: {contents: read}
+concurrency:
+  group: discord-account-neurons-graphql-readonly-20261027
+  cancel-in-progress: false
+jobs:
+  neurons:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9f2971c704cb792c36cea8854eb0c83dc21b1e15
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Query account-wide AI Neurons via read-only GraphQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(!token){console.log('ANALYTICS_READ_CREDENTIAL=MISSING');process.exit(0);}
+          const accountTag='6c8ccd6aface937ab5dabef61cb64534';
+          const day='2026-10-27';
+          const now=new Date();
+          const checkedAt=now.toISOString();
+          if(checkedAt.slice(0,10)!==day)throw Error('UTC_DAY_MISMATCH');
+          const query='query AccountWorkersAiNeurons($accountTag: string!, $start: Time!, $end: Time!){viewer{accounts(filter:{accountTag:$accountTag}){aiInferenceAdaptiveGroups(limit:1,filter:{datetime_gt:$start,datetime_lt:$end}){count sum{totalNeurons}}}}}';
+          const variables={accountTag,start:day+'T00:00:00Z',end:checkedAt};
+          let response,body;
+          try{
+            response=await fetch('https://api.cloudflare.com/client/v4/graphql',{
+              method:'POST',
+              headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+              body:JSON.stringify({query,variables}),
+              signal:AbortSignal.timeout(14000)
+            });
+          }catch{
+            console.log('GRAPHQL_READ=NETWORK_UNVERIFIED');
+            console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+            process.exit(0);
+          }
+          console.log('GRAPHQL_HTTP_STATUS='+response.status);
+          if(response.status!==200){
+            console.log('GRAPHQL_READ=NOT_AUTHORIZED_OR_UNAVAILABLE');
+            console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+            process.exit(0);
+          }
+          try{body=await response.json()}catch{
+            console.log('GRAPHQL_READ=INVALID_JSON');
+            process.exit(0);
+          }
+          if(Array.isArray(body.errors)&&body.errors.length>0){
+            const joined=body.errors.map(e=>String(e?.message||'')).join(';');
+            const errorType=/auth|permission|access|forbidden|scope/i.test(joined)?'ACCESS_DENIED':'QUERY_OR_SCHEMA_ERROR';
+            console.log('GRAPHQL_READ='+errorType);
+            console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+            process.exit(0);
+          }
+          const accounts=body?.data?.viewer?.accounts;
+          if(!Array.isArray(accounts)||accounts.length!==1||
+            !Array.isArray(accounts[0]?.aiInferenceAdaptiveGroups)){
+            console.log('GRAPHQL_READ=ACCOUNT_DATA_UNVERIFIED');
+            console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+            process.exit(0);
+          }
+          const groups=accounts[0].aiInferenceAdaptiveGroups;
+          console.log('GRAPHQL_ACCOUNT_COUNT='+accounts.length);
+          console.log('GRAPHQL_GROUP_ROWS='+groups.length);
+          console.log('GRAPHQL_TOTAL_NEURONS_METRIC_TYPE='+(groups[0]&&groups[0].sum?typeof groups[0].sum.totalNeurons:'MISSING'));
+          console.log('GRAPHQL_GROUP_COUNT_TYPE='+(groups[0]?typeof groups[0].count:'MISSING'));
+          if(groups.length===0){
+            // Cross-check that an earlier UTC day with a known model attempt
+            // is visible to the same account analytics query. This is READ ONLY.
+            const oldQuery='query PriorAiNeurons($accountTag: string!, $start: Time!, $end: Time!){viewer{accounts(filter:{accountTag:$accountTag}){aiInferenceAdaptiveGroups(limit:1,filter:{datetime_gt:$start,datetime_lt:$end}){count sum{totalNeurons}}}}}';
+            try{
+              const old=await fetch('https://api.cloudflare.com/client/v4/graphql',{
+                method:'POST',
+                headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+                body:JSON.stringify({query:oldQuery,variables:{
+                  accountTag,start:'2026-10-24T00:00:00Z',end:'2026-10-25T00:00:00Z'}}),
+                signal:AbortSignal.timeout(14000)
+              });
+              console.log('GRAPHQL_PRIOR_DAY_HTTP='+old.status);
+              if(old.status===200){
+                const payload=await old.json();
+                if(payload.errors?.length)console.log('GRAPHQL_PRIOR_DAY=SCHEMA_OR_ACCESS_ERROR');
+                else{
+                  const ar=payload?.data?.viewer?.accounts?.[0]?.aiInferenceAdaptiveGroups;
+                  console.log('GRAPHQL_PRIOR_DAY_GROUP_ROWS='+(Array.isArray(ar)?ar.length:'UNVERIFIED'));
+                  const sum=Array.isArray(ar)&&ar.length===1?ar[0]?.sum?.totalNeurons:null;
+                  const requests=Array.isArray(ar)&&ar.length===1?ar[0]?.count:null;
+                  console.log('GRAPHQL_PRIOR_DAY_NEURON_SUM='+
+                    (typeof sum==='number'&&Number.isFinite(sum)&&sum>=0?sum:'UNVERIFIED'));
+                  console.log('GRAPHQL_PRIOR_DAY_INFERENCE_COUNT='+
+                    (Number.isSafeInteger(requests)&&requests>=0?requests:'UNVERIFIED'));
+                }
+              }
+            }catch{console.log('GRAPHQL_PRIOR_DAY=READ_UNVERIFIED');}
+          }
+          if(groups.length!==1||typeof groups[0]?.sum?.totalNeurons!=='number'||
+             !Number.isFinite(groups[0].sum.totalNeurons)||groups[0].sum.totalNeurons<0){
+            console.log('GRAPHQL_READ=NEURON_AGGREGATE_UNVERIFIED');
+            console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+            process.exit(0);
+          }
+          const used=groups[0].sum.totalNeurons;
+          console.log('GRAPHQL_READ=AGGREGATE_OBTAINED');
+          console.log('ACCOUNT_UTC_DAY='+day);
+          console.log('ACCOUNT_METRIC_AS_OF='+checkedAt);
+          console.log('ACCOUNT_WORKERS_AI_AGGREGATE_NEURONS='+used);
+          console.log('ACCOUNT_ESTIMATED_UNCONSUMED_DAILY_FREE_ALLOCATION='+Math.max(0,10000-used));
+          console.log('ACCOUNT_DAILY_FREE_LIMIT_NEURONS=10000');
+          console.log('ANALYTICS_MAY_LAG_AND_ARE_NOT_RESERVED=true');
+          console.log('WORKERS_AI_CALLS=0; D1_WRITES=0; CLOUDFARE_CHANGES=0');
+          console.log('AUTHORIZES_LIVE_ACTIONS=false');
+          NODE
