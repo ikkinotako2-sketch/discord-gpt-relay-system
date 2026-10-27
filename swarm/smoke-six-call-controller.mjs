@@ -146,12 +146,19 @@ export async function runSixCallStep({store,liveEvidence,provider,clock=Date.now
  // Even a valid final result after deadline must not authorize another call.
  if(!finish||finish.runId!==s.runId||finish.revision!==claim.revision+1||
     finish.attempts!==index+1||finish.inFlightIndex!==null||
-    finish.completed!==(index+(outcome==='FINAL_VERIFIED'?1:0)))
+    finish.completed!==(index+(outcome==='FINAL_VERIFIED'?1:0))||
+    !['ACTIVE','RESTORE_REQUIRED'].includes(finish.phase)||
+    (outcome==='UNKNOWN'&&finish.phase!=='RESTORE_REQUIRED')||
+    (index+1===SMOKE_ATTEMPT_LIMIT&&finish.phase!=='RESTORE_REQUIRED'))
    return blocked('SETTLEMENT_UNVERIFIED_DO_NOT_RETRY');
  if(outcome==='UNKNOWN')return {status:'UNKNOWN_STOP',attempts:index+1,
    completed:index,restoreRequired:true,authorizesInference:false};
  if(index+1===SMOKE_ATTEMPT_LIMIT)return {status:'SIX_CALL_LIMIT_REACHED',
    attempts:6,completed:6,restoreRequired:true,authorizesInference:false};
+ if(finish.phase==='RESTORE_REQUIRED')return {
+   status:'STOP_OR_EXPIRY_RESTORE_REQUIRED',attempts:index+1,
+   completed:index+1,restoreRequired:true,authorizesInference:false
+ };
  const after=clock();
  if(!ms(after)||after>=s.expiresAtMs)return {status:'EXPIRED_RESTORE_REQUIRED',
    attempts:index+1,completed:index+1,restoreRequired:true,authorizesInference:false};
