@@ -267,6 +267,42 @@ test('oversized second UNKNOWN cannot be hidden by a row-size SQL filter',async(
   assert.equal(f.sql.prepare("SELECT count(*) n FROM swarm_jobs WHERE status='unknown'").get().n,2);
  }finally{f.sql.close();}
 });
+test('D1 claim owner or run start changed between two async reads is rejected before fake model',async t=>{
+ const variants=[
+  ['claim owner changed',sql=>sql.prepare(
+   "UPDATE swarm_smoke_control_claims SET owner_id=? WHERE run_id=? AND stage_index=0"
+  ).run('999999999999999999',runId)],
+  ['run created-at changed',sql=>sql.prepare(
+   "UPDATE swarm_smoke_control_runs SET created_at_ms=created_at_ms+1000 WHERE run_id=?"
+  ).run(runId)]
+ ];
+ for(const [label,mutate] of variants){
+  await t.test(label,async()=>{
+   const f=setup();
+   try{
+    const originalPrepare=f.db.prepare.bind(f.db);
+    let taskLoads=0;
+    f.db.prepare=query=>{
+     if(query.includes('JOIN swarm_smoke_control_owner_tasks t')&&
+        query.includes('JOIN swarm_smoke_control_claims c')){
+      taskLoads++;
+      if(taskLoads===2)mutate(f.sql);
+     }
+     return originalPrepare(query);
+    };
+    const result=await runSixCallStep({store:f.store,
+     liveEvidence:f.liveEvidence,provider:f.provider,clock:()=>now+13});
+    assert.equal(taskLoads,2);
+    assert.equal(result.status,'UNKNOWN_STOP');
+    assert.equal(f.modelCalls(),0);
+    assert.equal(f.sql.prepare(
+     'SELECT count(*) n FROM swarm_smoke_control_outputs').get().n,0);
+    assert.equal(f.sql.prepare(
+     'SELECT sum(reserved) n FROM swarm_budget_days').get().n,1);
+   }finally{f.sql.close();}
+  });
+ }
+});
 test('STOP after claim before owner task lookup blocks the provider and consumes reserved attempt',async()=>{
  const f=setup();
  try{
