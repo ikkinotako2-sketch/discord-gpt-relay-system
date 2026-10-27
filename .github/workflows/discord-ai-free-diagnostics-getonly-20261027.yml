@@ -1,0 +1,87 @@
+name: Discord AI Free Plan Token and Model GET Only 20261027
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261027-once]
+    paths:
+      - '.github/workflows/discord-ai-free-diagnostics-getonly-20261027.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-free-readonly-diag-20261027
+  cancel-in-progress: false
+jobs:
+  readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9f2971c704cb792c36cea8854eb0c83dc21b1e15
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inspect token and model listing with GET only, never inference
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(new Date().toISOString().slice(0,10)!=='2026-10-27')
+            throw Error('UTC_AUDIT_DATE_OUT_OF_SCOPE');
+          if(!token){
+            console.log('TOKEN_PRESENT=false');
+            console.log('TOKEN_STATUS=UNVERIFIED');
+            console.log('MODEL_LIST_ACCESS=UNVERIFIED');
+            console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+            process.exit(0);
+          }
+          const endpoints=[
+            ['TOKEN_VERIFY','https://api.cloudflare.com/client/v4/user/tokens/verify'],
+            ['MODEL_CATALOG','https://api.cloudflare.com/client/v4/accounts/'+account+'/ai/models/search?search=gpt-oss-20b&per_page=10']
+          ];
+          const safeCodes=new Set([10000,10001,10003,9103,1004,5035]);
+          for(const [name,url] of endpoints){
+            try{
+              const res=await fetch(url,{
+                method:'GET',headers:{Authorization:'Bearer '+token,Accept:'application/json'},
+                signal:AbortSignal.timeout(12000)
+              });
+              console.log(name+'_HTTP_STATUS='+res.status);
+              let body;
+              try{body=await res.json()}catch{body=null;}
+              console.log(name+'_API_SUCCESS='+(body?.success===true));
+              const codes=(Array.isArray(body?.errors)?body.errors:[])
+                .map(x=>Number(x?.code)).filter(n=>Number.isSafeInteger(n)&&safeCodes.has(n));
+              console.log(name+'_KNOWN_ERROR_CODES='+([...new Set(codes)].join(',')||'NONE_OR_REDACTED'));
+              if(name==='TOKEN_VERIFY'){
+                const state=body?.success===true&&['active','disabled','expired'].includes(body?.result?.status)?
+                  body.result.status:'UNVERIFIED';
+                console.log('TOKEN_STATUS='+state);
+              }
+              if(name==='MODEL_CATALOG'){
+                if(res.status===200&&body?.success===true&&Array.isArray(body.result)){
+                  const match=body.result.some(x=>[x?.id,x?.name,x?.model,x?.model_id]
+                    .some(n=>n==='@cf/openai/gpt-oss-20b'));
+                  console.log('PINNED_MODEL_LISTED='+match);
+                } else console.log('PINNED_MODEL_LISTED=UNVERIFIED');
+              }
+            }catch{
+              console.log(name+'_HTTP_STATUS=NETWORK_UNVERIFIED');
+            }
+          }
+          // Official published model rates: 18182 neurons/M input tokens,
+          // 27273 neurons/M output tokens. Planning bound only, not usage.
+          const upperNeurons=6*((2048*18182+512*27273)/1000000);
+          console.log('FREE_DAILY_NEURON_ALLOCATION=10000');
+          console.log('GTP_OSS_20B_SIX_CALL_EXAMPLE_INPUT_TOKENS_PER_CALL=2048');
+          console.log('GPT_OSS_20B_SIX_CALL_EXAMPLE_OUTPUT_TOKENS_PER_CALL=512');
+          console.log('GPT_OSS_20B_SIX_CALL_PLANNING_NEURONS='+upperNeurons.toFixed(3));
+          console.log('ACCOUNT_WIDE_REMAINING_NEURONS=UNVERIFIED');
+          console.log('MODEL_INFERENCE_PERMISSION=UNVERIFIED');
+          console.log('AI_RUN_REQUESTS=0');
+          console.log('SECRETS_WRITTEN=false');
+          console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+          NODE
