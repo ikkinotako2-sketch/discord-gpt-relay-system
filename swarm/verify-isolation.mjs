@@ -253,6 +253,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/smoke-six-call-d1-readonly-audit.test.mjs',
     'swarm/smoke-six-call-cross-evidence.mjs',
     'swarm/smoke-six-call-cross-evidence.test.mjs',
+    'swarm/smoke-six-call-migration-acceptance.test.mjs',
+    '.github/workflows/swarm-six-call-output-d1-offline.yml',
     'swarm/verify-isolation.mjs',
     'swarm/SMOKE_SIX_CALL_D1_DDL_INTEGRITY.md'
   ]);
