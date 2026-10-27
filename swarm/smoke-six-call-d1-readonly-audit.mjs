@@ -10,13 +10,15 @@ const REQUIRED=Object.freeze({
  swarm_smoke_control_one_open:'index',
  swarm_smoke_control_one_pending_or_open:'index',
  swarm_smoke_control_claim_atomic:'trigger',
- swarm_smoke_control_settle_atomic:'trigger'
+ swarm_smoke_control_settle_atomic:'trigger',
+ swarm_smoke_control_outputs:'table'
 });
 export const D1_CONTROL_SCHEMA_NAMES=Object.freeze(Object.keys(REQUIRED));
 export const D1_SCHEMA_SELECT=`SELECT name,type,sql FROM sqlite_master
  WHERE name IN ('swarm_smoke_control_runs','swarm_smoke_control_claims',
  'swarm_smoke_control_one_open','swarm_smoke_control_one_pending_or_open',
- 'swarm_smoke_control_claim_atomic','swarm_smoke_control_settle_atomic')
+ 'swarm_smoke_control_claim_atomic','swarm_smoke_control_settle_atomic',
+ 'swarm_smoke_control_outputs')
  ORDER BY name`;
 export const D1_STATE_SELECT=`SELECT
  (SELECT COUNT(*) FROM swarm_smoke_control_runs) AS runs,
@@ -34,7 +36,18 @@ export const D1_STATE_SELECT=`SELECT
  (SELECT COALESCE(SUM(CASE WHEN state='UNKNOWN' THEN 1 ELSE 0 END),0)
   FROM swarm_smoke_control_claims) AS new_unknown,
  (SELECT COALESCE(SUM(CASE WHEN state='FINAL_VERIFIED' THEN 1 ELSE 0 END),0)
-  FROM swarm_smoke_control_claims) AS final_receipts`;
+  FROM swarm_smoke_control_claims) AS final_receipts,
+ (SELECT COUNT(*) FROM swarm_smoke_control_outputs) AS output_rows,
+ (SELECT COUNT(*) FROM swarm_smoke_control_outputs o
+  JOIN swarm_smoke_control_claims c
+   ON c.run_id=o.run_id AND c.stage_index=o.stage_index
+  WHERE c.state='FINAL_VERIFIED') AS final_output_rows,
+ (SELECT COUNT(*) FROM swarm_smoke_control_outputs o
+  LEFT JOIN swarm_smoke_control_claims c
+   ON c.run_id=o.run_id AND c.stage_index=o.stage_index
+  WHERE c.run_id IS NULL OR c.state='UNKNOWN'
+   OR o.owner_id<>c.owner_id
+   OR o.receipt_id<>('final_'||substr(o.digest_sha256,1,40))) AS invalid_output_rows`;
 const count=n=>Number.isSafeInteger(n)&&n>=0;
 const time=n=>Number.isSafeInteger(n)&&n>=1e12;
 const deny=reason=>Object.freeze({status:'BLOCKED',reason,authorizesLiveActions:false,
@@ -92,13 +105,18 @@ export async function collectSixCallD1ReadOnly({
     return deny('CONTROL_STATE_ROWS_UNVERIFIED');
    const x=rows[0],keys=[
     'runs','reserved_attempts','verified_finals','open_runs','stopped_runs',
-    'in_flight_runs','claim_rows','claimed_unresolved','new_unknown','final_receipts'
+    'in_flight_runs','claim_rows','claimed_unresolved','new_unknown','final_receipts',
+    'output_rows','final_output_rows','invalid_output_rows'
    ];
    if(!keys.every(k=>count(x[k]))||x.reserved_attempts<x.verified_finals||
       x.reserved_attempts>6*x.runs||x.verified_finals>6*x.runs||
       x.claim_rows!==x.reserved_attempts||
       x.claimed_unresolved+x.new_unknown+x.final_receipts!==x.claim_rows||
       x.verified_finals!==x.final_receipts||
+      x.final_output_rows!==x.final_receipts||
+      x.output_rows<x.final_output_rows||
+      x.output_rows>x.final_output_rows+x.claimed_unresolved||
+      x.output_rows>x.claim_rows||x.invalid_output_rows!==0||
       x.in_flight_runs!==x.claimed_unresolved||
       x.open_runs>x.runs||x.stopped_runs>x.runs)
     return deny('D1_CONTROL_COUNTERS_INCONSISTENT');
