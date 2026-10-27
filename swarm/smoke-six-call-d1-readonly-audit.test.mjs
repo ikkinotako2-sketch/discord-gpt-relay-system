@@ -20,6 +20,7 @@ function fixture({migrated=false}={}){
  if(migrated){
   sqlite.exec(sqlText('smoke-six-call-d1-schema.review.sql'));
   sqlite.exec(sqlText('smoke-six-call-owner-prepare-index.review.sql'));
+  sqlite.exec(sqlText('smoke-six-call-output-artifacts.review.sql'));
  }
  const queries=[];
  const fetchImpl=async(url,opts)=>{
@@ -96,6 +97,33 @@ test('partial index or trigger migration must BLOCK and not query missing tables
   assert.deepEqual(f.queries,[D1_SCHEMA_SELECT]);
  }finally{f.sqlite.close();}
 });
+test('original six objects without required output receipts table are PARTIAL and BLOCKED',async()=>{
+ const f=fixture({migrated:true});try{
+  f.sqlite.exec('DROP TABLE swarm_smoke_control_outputs');
+  const result=await collectSixCallD1ReadOnly(options(f));
+  assert.equal(result.reason,'PARTIAL_D1_CONTROL_MIGRATION_UNSAFE');
+  assert.deepEqual(f.queries,[D1_SCHEMA_SELECT]);
+ }finally{f.sqlite.close();}
+});
+test('settled FINAL_VERIFIED without matching persisted output is BLOCKED',async()=>{
+ const f=fixture({migrated:true});try{
+  f.sqlite.prepare(`INSERT INTO swarm_smoke_control_runs
+   (run_id,owner_id,task_receipt_id,account_id,worker_name,database_id,
+   baseline_version,smoke_version,phase,created_at_ms,updated_at_ms,expires_at_ms)
+   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    RUN,owner,'receipt_claim_20261027',T.accountId,T.worker,T.databaseId,
+    V1,V2,'ACTIVE',now,now,now+19*60*1000);
+  f.sqlite.prepare(`INSERT INTO swarm_smoke_control_claims
+   (run_id,stage_index,owner_id,utc_day,claimed_at_ms)
+   VALUES(?,?,?,?,?)`).run(RUN,0,owner,'2026-10-27',now+10);
+  f.sqlite.prepare(`UPDATE swarm_smoke_control_claims
+   SET state='FINAL_VERIFIED',settled_at_ms=?
+   WHERE run_id=? AND stage_index=0`).run(now+11,RUN);
+  const result=await collectSixCallD1ReadOnly(options(f));
+  assert.equal(result.reason,'D1_CONTROL_COUNTERS_INCONSISTENT');
+  assert.deepEqual(f.queries,[D1_SCHEMA_SELECT,D1_STATE_SELECT]);
+ }finally{f.sqlite.close();}
+});
 test('schema metadata duplication and object type mismatch block',async()=>{
  for(const change of [rows=>[...rows,rows[0]],
   rows=>rows.map((r,i)=>i===0?{...r,type:'view'}:r)]){
@@ -140,7 +168,8 @@ test('counter corruption and impossible >6 attempts are never treated as safe',a
    {claim_rows:1},{runs:1,reserved_attempts:7},
    {new_unknown:1},{in_flight_runs:1},
    {verified_finals:1},{runs:null},{runs:'0'}, {claimed_unresolved:-1},
-   {verified_finals:0.5}
+   {verified_finals:0.5},{output_rows:1},
+   {final_output_rows:1},{invalid_output_rows:1}
   ];
   for(const extra of corruptions){
    const result=await collectSixCallD1ReadOnly({
