@@ -1,0 +1,96 @@
+name: Discord Free Account Cron Cap GET-only 20261027
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261027-once]
+    paths:
+      - '.github/workflows/discord-free-account-cron-cap-getonly-20261027.yml'
+permissions: {contents: read}
+concurrency:
+  group: discord-free-account-cron-readonly-20261027
+  cancel-in-progress: false
+jobs:
+  account_cron_readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 341884e8628cf4ce8749271b63a9cece4572e93a
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fixed-scope account Workers list and every cron schedule GET (no writes)
+        run: |
+          node --input-type=module <<'NODE'
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(new Date().toISOString().slice(0,10)!=='2026-10-27')
+            throw Error('AUDIT_ONLY_2026_10_27_UTC');
+          if(!token){
+            console.log('WORKERS_READ=NO_TOKEN');
+            console.log('FREE_CRON_COUNT=UNVERIFIED');
+            process.exit(0);
+          }
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts';
+          let requests=0;
+          async function get(url){
+            if(!url.startsWith(root)||requests>=102)throw Error('GET_SCOPE_OR_BUDGET_FAILED');
+            requests++;
+            const res=await fetch(url,{method:'GET',headers:{Authorization:'Bearer '+token,
+              Accept:'application/json'},signal:AbortSignal.timeout(12000)});
+            if(res.status!==200)return {http:res.status,ok:false};
+            const payload=await res.json();
+            return {http:res.status,ok:payload?.success===true,result:payload?.result};
+          }
+          try{
+            const listed=await get(root);
+            console.log('SCRIPTS_LIST_HTTP='+listed.http);
+            if(!listed.ok||!Array.isArray(listed.result)||listed.result.length>100){
+              console.log('FREE_CRON_COUNT=UNVERIFIED');
+              process.exit(0);
+            }
+            const scripts=listed.result.map(x=>x?.id);
+            if(scripts.some(x=>typeof x!=='string'||!/^[-_a-zA-Z0-9]{1,128}$/.test(x))||
+              new Set(scripts).size!==scripts.length){
+              console.log('SCRIPTS_SHAPE=UNVERIFIED');
+              process.exit(0);
+            }
+            console.log('SCRIPTS_LISTED='+scripts.length);
+            let total=0,read=0,failed=0,watchdog=null,discord=null;
+            for(const name of scripts){
+              const result=await get(root+'/'+encodeURIComponent(name)+'/schedules');
+              if(!result.ok||!Array.isArray(result.result?.schedules)){
+                failed++;continue;
+              }
+              const rows=result.result.schedules;
+              if(rows.some(x=>typeof x?.cron!=='string')){
+                failed++;continue;
+              }
+              total+=rows.length;read++;
+              if(name==='discord-smoke-independent-watchdog-staged')watchdog=rows.length;
+              if(name==='steep-glitter-b5cddiscord-ai-relay-lab')discord=rows.length;
+            }
+            console.log('CRON_WORKERS_READ='+read);
+            console.log('CRON_WORKERS_FAILED='+failed);
+            console.log('ACCOUNT_CRON_OBSERVED_COUNT='+(failed===0?total:'UNVERIFIED'));
+            console.log('WATCHDOG_CRON_COUNT='+(watchdog===null?'UNVERIFIED':watchdog));
+            console.log('DISCORD_RELAY_CRON_COUNT='+(discord===null?'UNVERIFIED':discord));
+            console.log('WORKERS_FREE_CRON_LIMIT=5');
+            console.log('ACCOUNT_FREE_CRON_SPARE='+(failed===0?Math.max(0,5-total):'UNVERIFIED'));
+            console.log('ACCOUNT_CRON_STATUS='+
+              (failed===0&&total<=5?'NUMERIC_FIT_REVIEW_ONLY':'BLOCKED_OR_UNVERIFIED'));
+            console.log('WORKERS_REQUESTS_FREE_LIMIT=100000');
+            console.log('WORKERS_AI_NEURONS_SEPARATE_LIMIT=10000');
+            console.log('FREE_AI_NEURON_USAGE=UNVERIFIED');
+            console.log('CLOUDFARE_WRITES=0');
+            console.log('AI_RUN_REQUESTS=0');
+            console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+          }catch{
+            console.log('ACCOUNT_CRON_READ=UNVERIFIED');
+            console.log('FREE_CRON_COUNT=UNVERIFIED');
+            console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+          }
+          NODE
