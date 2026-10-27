@@ -5,14 +5,20 @@ import {collectGitHubSixCallReadOnly,EXPECTED_DRAFT_STACK,
 
 const now=Date.UTC(2026,9,26,11,30);
 const mainSha='eeeebd6665e2384f32ed0a8e8014fd29ada29e0f';
-const topSha='e149a1412e05bf0e33a06f63ee59dd0ed3811f8a';
+const topSha='ce0e2b50582053fead13a7d608a85ae4910d4131';
 const repo='https://api.github.com/repos/ikkinotako2-sketch/discord-gpt-relay-system';
 const valid=()=>({
  expectedMainSha:mainSha,expectedTopHeadSha:topSha,clock:()=>now
 });
-function mock({active={},mutate=()=>null,failPath=null,onCall=()=>{}}={}){
+function mock({active={},lateActive={},mutate=()=>null,failPath=null,onCall=()=>{},
+ extraDrafts=[],expectedSha=topSha}={}){
  const calls=[];
  let mainReads=0;
+ const seenCounts=new Map();
+ const additional=extraDrafts.reduce((acc,item)=>{
+  const last=acc.at(-1);
+  acc.push([item.number,last[2],item.head]);return acc;
+ },[...EXPECTED_DRAFT_STACK]);
  const fn=async (url,options)=>{
   assert.ok(url.startsWith(repo+'/'));
   assert.equal(options.method,'GET');
@@ -27,33 +33,37 @@ function mock({active={},mutate=()=>null,failPath=null,onCall=()=>{}}={}){
    data={sha:mainSha};
   }else if(url.includes('/actions/runs?')){
    const status=new URL(url).searchParams.get('status');
-   data={total_count:active[status]??0};
+   const reads=(seenCounts.get(status)||0)+1;
+   seenCounts.set(status,reads);
+   data={total_count:reads===1?(active[status]??0):
+    (lateActive[status]??active[status]??0)};
   }else if(/\/pulls\/\d+$/.test(url)){
    const num=Number(url.split('/').at(-1));
-   const expected=EXPECTED_DRAFT_STACK.find(x=>x[0]===num);
+   const expected=additional.find(x=>x[0]===num);
    if(!expected)throw Error('UNEXPECTED_PR');
    data={number:num,state:'open',draft:true,merged:false,
-    base:{ref:expected[1]},head:{ref:expected[2],
-     sha:num===28?topSha:'a'.repeat(40)}};
+    base:{ref:expected[1],repo:{full_name:'ikkinotako2-sketch/discord-gpt-relay-system'}},
+    head:{ref:expected[2],repo:{full_name:'ikkinotako2-sketch/discord-gpt-relay-system'},
+     sha:num===additional.at(-1)[0]?expectedSha:'a'.repeat(40)}};
   }else throw Error('UNEXPECTED_GITHUB_URL '+url);
   return {status:200,ok:true,json:async()=>mutate(url,data,{mainReads})||data};
  };
  return {fn,calls};
 }
-test('real-shaped GET-only report confirms 5 statuses and seven Draft PRs but never live',async()=>{
+test('real-shaped GET-only report confirms 5 statuses and 13 Draft PRs through #34',async()=>{
  const f=mock();
  const x=await collectGitHubSixCallReadOnly({...valid(),fetchImpl:f.fn});
  assert.equal(x.status,'GITHUB_ZERO_ACTIVE_UNMERGED_DRAFTS');
  assert.equal(x.source,'GITHUB_API_GET_RUN_COUNTS');
  assert.equal(x.activeCount,0);
- assert.equal(x.draftCount,7);
- assert.equal(x.stack[0].number,21);assert.equal(x.stack.at(-1).number,28);
+ assert.equal(x.draftCount,13);
+ assert.equal(x.stack[0].number,21);assert.equal(x.stack.at(-1).number,34);
  assert.equal(x.mainHeadMatched,true);
  assert.equal(x.draftPrsMergedInSafeOrder,false);
  assert.equal(x.authorizesLiveActions,false);
  assert.equal(x.authorizesDeployment,false);
  assert.equal(x.authorizesInference,false);
- assert.equal(f.calls.length,2+GITHUB_ACTIVE_RUN_STATUSES.length+EXPECTED_DRAFT_STACK.length);
+ assert.equal(f.calls.length,2+2*GITHUB_ACTIVE_RUN_STATUSES.length+EXPECTED_DRAFT_STACK.length);
  assert.ok(f.calls.every(u=>u.startsWith(repo+'/')));
 });
 test('a single queued or in-progress Action blocks safety check',async()=>{
@@ -100,7 +110,7 @@ test('main precondition is pinned and mismatching expected SHA blocks',async()=>
  assert.equal(x.reason,'MAIN_HEAD_DRIFT_OR_UNVERIFIED');
 });
 test('top Draft PR HEAD drift fails even if all CI queues are zero',async()=>{
- const f=mock({mutate:(url,d)=>url.endsWith('/pulls/28')?
+ const f=mock({mutate:(url,d)=>url.endsWith('/pulls/34')?
   {...d,head:{...d.head,sha:'d'.repeat(40)}}:null});
  const x=await collectGitHubSixCallReadOnly({...valid(),fetchImpl:f.fn});
  assert.equal(x.reason,'CANDIDATE_HEAD_DRIFT');
@@ -153,4 +163,50 @@ test('caller-supplied approval flags cannot cause read-only record to authorize 
   authorizesInference:true});
  assert.equal(x.authorizesInference,false);
  assert.equal(x.authorizesDeployment,false);
+});
+
+test('new GitHub Actions started during PR GET sweep are detected by second count',async()=>{
+ const x=await collectGitHubSixCallReadOnly({...valid(),
+  fetchImpl:mock({lateActive:{in_progress:1}}).fn});
+ assert.equal(x.status,'GITHUB_ACTIONS_IN_PROGRESS_BLOCKED');
+ assert.equal(x.activeCountBefore,0);
+ assert.equal(x.activeCountAfter,1);
+ assert.equal(x.authorizesInference,false);
+});
+test('reviewed extra Draft PR #35 extends chain only with exact GitHub base and SHA',async()=>{
+ const extraDrafts=[{number:35,head:'feature/discord-six-call-next-20261027'}];
+ const end='d'.repeat(40);
+ const f=mock({extraDrafts,expectedSha:end});
+ const x=await collectGitHubSixCallReadOnly({...valid(),
+  expectedTopHeadSha:end,extraDrafts,fetchImpl:f.fn});
+ assert.equal(x.status,'GITHUB_ZERO_ACTIVE_UNMERGED_DRAFTS');
+ assert.equal(x.draftCount,14);
+ assert.equal(x.stack.at(-1).number,35);
+ assert.equal(x.stack.at(-1).base,'feature/discord-six-call-postclaim-stop-20261027');
+ assert.equal(x.authorizesLiveActions,false);
+});
+test('unreviewed future-chain number/name/scope or forked PR never passes',async()=>{
+ const extras=[
+  [{number:34,head:'feature/discord-six-call-next-20261027'}],
+  [{number:35,head:'other/pr'}],
+  [{number:35,head:'feature/discord-six-call-next-20261027',approve:true}],
+  [{number:35,head:'feature/discord-six-call-next-20261027'},
+   {number:35,head:'feature/discord-six-call-other-20261027'}],
+ ];
+ for(const extraDrafts of extras){
+  const x=await collectGitHubSixCallReadOnly({...valid(),
+   extraDrafts,fetchImpl:async()=>{throw Error('SHOULD_NOT_FETCH')}});
+  assert.equal(x.status,'BLOCKED');
+ }
+ const f=mock({mutate:(url,p)=>url.endsWith('/pulls/33')?
+  {...p,head:{...p.head,repo:{full_name:'attacker/fork'}}}:null});
+ const x=await collectGitHubSixCallReadOnly({...valid(),fetchImpl:f.fn});
+ assert.equal(x.reason,'DRAFT_STACK_DRIFT_PR_33');
+});
+test('second pass malformed run counts fail closed, not stale zero success',async()=>{
+ const f=mock({mutate:(url,p)=>url.includes('status=waiting')&&
+  p.total_count===0?null:null,lateActive:{waiting:2}});
+ const r=await collectGitHubSixCallReadOnly({...valid(),fetchImpl:f.fn});
+ assert.equal(r.status,'GITHUB_ACTIONS_IN_PROGRESS_BLOCKED');
+ assert.equal(r.activeCountAfter,2);
 });
