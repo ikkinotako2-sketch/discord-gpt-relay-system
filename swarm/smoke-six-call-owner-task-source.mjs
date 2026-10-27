@@ -25,19 +25,35 @@ WHERE r.run_id=? AND r.task_receipt_id=? AND r.owner_id=?
  AND c.stage_index=?
 LIMIT 1
 `;
-// Read the actual historical D1 row, not a caller-asserted verification status.
-// Two rows maximum distinguish the preserved single UNKNOWN from extra UNKNOWNs.
-const HISTORICAL_UNKNOWN_SQL=`SELECT status,calls_used,cycles,stop_requested,
- active_slot,last_error,created_at,updated_at,
+// Review-only, never build the original pin from the same live D1 SELECT.
+// It must come from a separately retained, owner-reviewed original-row read.
+// The real pin is NOT present in this repository, so the default fails closed.
+// Including all stored columns detects row replacement and equal-length edits.
+const HISTORICAL_UNKNOWN_COLUMNS=Object.freeze([
+ 'run_id','owner_id','task','cycles','status','calls_used','revision',
+ 'history_json','checkpoint','stop_requested','active_slot','lease_owner',
+ 'lease_expires_at','last_error','created_at','updated_at','expires_at'
+]);
+const HISTORICAL_UNKNOWN_SQL=`SELECT ${HISTORICAL_UNKNOWN_COLUMNS.join(',')},
  LENGTH(history_json) AS history_length,LENGTH(checkpoint) AS checkpoint_length
- FROM swarm_jobs WHERE status='unknown' ORDER BY created_at DESC LIMIT 2`;
-async function verifyPreservedUnknownInD1(db,now){
+ FROM swarm_jobs WHERE status='unknown' AND LENGTH(history_json)<=65536
+ AND LENGTH(checkpoint)<=65536 AND LENGTH(task)<=4096 LIMIT 2`;
+function validIndependentPin(pin){
+ return pin&&Object.keys(pin).sort().join(',')==='digestSha256,ownerId,runId'&&
+  ID.test(pin.runId||'')&&OWNER.test(pin.ownerId||'')&&
+  SHA.test(pin.digestSha256||'');
+}
+async function verifyPreservedUnknownInD1(db,now,pin){
  const evidence=await db.prepare(HISTORICAL_UNKNOWN_SQL).all();
  const rows=evidence?.results;
- if(!Array.isArray(rows)||rows.length!==1||!rows[0]||
+ const row=rows?.[0];
+ if(!Array.isArray(rows)||rows.length!==1||!row||
+    row.run_id!==pin.runId||row.owner_id!==pin.ownerId||
     !Object.entries(HISTORICAL_UNKNOWN_FINGERPRINT)
-     .every(([key,value])=>rows[0][key]===value)||
-    now<HISTORICAL_UNKNOWN_FINGERPRINT.updated_at)
+     .every(([key,value])=>row[key]===value)||
+    now<HISTORICAL_UNKNOWN_FINGERPRINT.updated_at||
+    await sha256(JSON.stringify(HISTORICAL_UNKNOWN_COLUMNS.map(key=>row[key])))!==
+      pin.digestSha256)
    throw Error('HISTORICAL_UNKNOWN_D1_FINGERPRINT_CHANGED_OR_MISSING');
 }
 const PREVIOUS=`
@@ -66,10 +82,11 @@ function exactRequest(x,runId){
  * Even a positive local D1 read DOES NOT authorize live deployment or AI.
  */
 export function createStagedD1OwnerTaskReader({
- db,runId,ownerId,clock=Date.now
+ db,runId,ownerId,independentlyPinnedUnknown,clock=Date.now
 }={}){
  if(typeof db?.prepare!=='function'||!ID.test(runId||'')||
-    !OWNER.test(ownerId||'')||typeof clock!=='function')
+    !OWNER.test(ownerId||'')||!validIndependentPin(independentlyPinnedUnknown)||
+    typeof clock!=='function')
    throw Error('TRUSTED_OWNER_TASK_DEPENDENCIES_MISSING');
  return Object.freeze({
   async loadVerifiedTask(request){
@@ -98,7 +115,7 @@ export function createStagedD1OwnerTaskReader({
      throw Error('OWNER_TASK_D1_CLAIM_OR_STATE_UNVERIFIED');
    // Fail closed if the original historical UNKNOWN was removed, edited,
    // duplicated or became unreadable. Never replay or mutate it.
-   await verifyPreservedUnknownInD1(db,now);
+   await verifyPreservedUnknownInD1(db,now,independentlyPinnedUnknown);
    let previous='';
    if(i>0){
     const p=await db.prepare(PREVIOUS).bind(runId,i-1).first();
@@ -131,7 +148,7 @@ export function createStagedD1OwnerTaskReader({
      throw Error('OWNER_STOP_OR_CLAIM_CHANGED_BEFORE_PROVIDER');
    // The original UNKNOWN must also remain identical after all intermediate
    // D1 reads. These are not atomic snapshots or a live-release grant.
-   await verifyPreservedUnknownInD1(db,now);
+   await verifyPreservedUnknownInD1(db,now,independentlyPinnedUnknown);
    return Object.freeze({
     ...request,source:'SERVER_D1_VERIFIED_OWNER_TASK',
     ownerId,expiryMs:r.expires_at_ms,checkedAtMs:now,
