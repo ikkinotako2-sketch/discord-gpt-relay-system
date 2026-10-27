@@ -1,0 +1,76 @@
+name: Discord Free Neurons Account Usage GET Only 20261027
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261027-once]
+    paths:
+      - '.github/workflows/discord-ai-free-billable-usage-getonly-20261027.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-free-account-usage-get-20261027
+  cancel-in-progress: false
+jobs:
+  usage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9f2971c704cb792c36cea8854eb0c83dc21b1e15
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Account usage GET (restricted alpha) with sanitized output, no billing mutation
+        run: |
+          node --input-type=module <<'NODE'
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(new Date().toISOString().slice(0,10)!=='2026-10-27')
+            throw Error('UTC_DATE_NOT_ALLOWED');
+          if(!token){
+            console.log('USAGE_READ=NO_TOKEN');
+            console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+            process.exit(0);
+          }
+          // Cloudflare GET account billable/usage: documented restricted
+          // alpha API; this is NOT a purchase or billable cost request.
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const url='https://api.cloudflare.com/client/v4/accounts/'+account+
+            '/billable/usage?from=2026-10-27&to=2026-10-27';
+          try{
+            const res=await fetch(url,{method:'GET',headers:{
+              Authorization:'Bearer '+token,Accept:'application/json'
+            },signal:AbortSignal.timeout(12000)});
+            console.log('ACCOUNT_USAGE_HTTP='+res.status);
+            if(res.status!==200){
+              console.log('ACCOUNT_USAGE_METRIC=UNVERIFIED');
+              console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+              process.exit(0);
+            }
+            const body=await res.json();
+            if(body?.success!==true||!Array.isArray(body.result)){
+              console.log('ACCOUNT_USAGE_METRIC=UNVERIFIED');
+              process.exit(0);
+            }
+            // A snapshot of usage rows may lag and is not provider-side
+            // quota reservation. Never expose account names or billing items.
+            const hits=body.result.filter(r=>
+              /workers ai/i.test(String(r?.x_ProductFamilyName||'')+
+                ' '+String(r?.x_BillableMetricName||''))&&
+              /neuron/i.test(String(r?.ConsumedUnit||'')+
+                ' '+String(r?.x_BillableMetricName||'')));
+            const valid=hits.length>0&&hits.every(r=>
+              typeof r.ConsumedQuantity==='number'&&
+              Number.isFinite(r.ConsumedQuantity)&&r.ConsumedQuantity>=0);
+            console.log('ACCOUNT_USAGE_TOTAL_RECORDS='+body.result.length);
+            console.log('WORKERS_AI_NEURON_RECORDS='+hits.length);
+            console.log('ACCOUNT_AI_USAGE_NEURONS='+
+              (valid?hits.reduce((t,r)=>t+r.ConsumedQuantity,0):'UNVERIFIED'));
+            console.log('ACCOUNT_FREE_NEURONS_REMAINING=UNVERIFIED');
+          }catch{console.log('ACCOUNT_USAGE_METRIC=NETWORK_UNVERIFIED');}
+          console.log('AI_RUN_REQUESTS=0');
+          console.log('BILLING_MUTATIONS=0');
+          console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+          NODE
