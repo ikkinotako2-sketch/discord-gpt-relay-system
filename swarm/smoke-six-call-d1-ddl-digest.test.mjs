@@ -21,7 +21,8 @@ function mock(db,{changeRows=x=>x}={}){
   assert.equal(options.method,'POST');
   const body=JSON.parse(options.body);
   assert.ok([D1_SCHEMA_SELECT,D1_STATE_SELECT].includes(body.sql));
-  assert.ok(body.sql.startsWith('SELECT '));
+  assert.equal(body.sql.slice(0,6),'SELECT');
+  assert.ok([9,10,13,32].includes(body.sql.charCodeAt(6)));
   queries.push(body.sql);
   const rows=body.sql===D1_SCHEMA_SELECT?changeRows(db.prepare(body.sql).all()):
     db.prepare(body.sql).all();
