@@ -21,7 +21,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Exact eight-file review scope
+      - name: Exact reviewed eight/eleven/fourteen-file offline diff
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -80,7 +80,7 @@ jobs:
           const actual=readFileSync('/tmp/smoke-output-files.txt','utf8').trim().split('\n');
           if(![expected,ownerTaskReview,elevenObjectAudit,combinedUnknownAndElevenD1Review].some(s=>actual.length===s.size&&
              new Set(actual).size===s.size&&actual.every(x=>s.has(x))))throw Error('UNREVIEWED_SQL_OR_CODE_PATH');
-          console.log('OUTPUT_D1_OR_OWNER_TASK_STRICT_SCOPE_PASS');
+          console.log('OUTPUT_D1_EXACT_REVIEWED_SCOPE_PASS');
           NODE
       - name: Offline local SQLite verified output tests and six-call regressions
         run: |
