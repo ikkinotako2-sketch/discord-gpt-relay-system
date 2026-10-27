@@ -52,8 +52,13 @@ export const D1_STATE_SELECT=`SELECT
  (SELECT COUNT(*) FROM swarm_smoke_control_outputs o
   LEFT JOIN swarm_smoke_control_claims c
    ON c.run_id=o.run_id AND c.stage_index=o.stage_index
-  WHERE c.run_id IS NULL OR c.state='UNKNOWN'
-   OR o.owner_id<>c.owner_id
+  LEFT JOIN swarm_smoke_control_runs r ON r.run_id=o.run_id
+  WHERE c.run_id IS NULL OR r.run_id IS NULL OR c.state='UNKNOWN'
+   OR o.owner_id<>c.owner_id OR o.owner_id<>r.owner_id
+   OR o.task_receipt_id<>r.task_receipt_id
+   OR o.claim_revision<>(2*o.stage_index+1)
+   OR o.saved_at_ms<c.claimed_at_ms
+   OR o.saved_at_ms<r.created_at_ms OR o.saved_at_ms>=r.expires_at_ms
    OR o.receipt_id<>('final_'||substr(o.digest_sha256,1,40))) AS invalid_output_rows,
  (SELECT COUNT(*) FROM swarm_smoke_control_owner_tasks) AS owner_task_rows,
  (SELECT COUNT(*) FROM swarm_smoke_control_owner_tasks t
