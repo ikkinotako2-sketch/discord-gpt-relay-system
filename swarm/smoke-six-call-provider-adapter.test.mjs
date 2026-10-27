@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
+import {createD1SixCallStore} from './smoke-six-call-d1-store.mjs';
+import {runSixCallStep} from './smoke-six-call-controller.mjs';
+import {DISCORD_SMOKE_TARGET} from './smoke-restore-guard.mjs';
 import {createStagedSixCallAIProvider,sixCallRoleMessages,
  SIX_CALL_OUTPUT_TOKEN_LIMIT,SIX_CALL_ROLE_COUNT}
  from './smoke-six-call-provider-adapter.mjs';
@@ -215,4 +219,92 @@ test('no live Worker imports this adapter and it cannot mutate Cloudflare',()=>{
  assert.equal(content.includes('fetch('),false);
  assert.equal(content.includes('wrangler'),false);
  assert.equal(content.includes('secrets.'),false);
+});
+
+test('end-to-end LOCAL SQLite controller -> staged fake GPT-OSS -> six receipts -> restore only',async()=>{
+ const sqlite=new DatabaseSync(':memory:');
+ try{
+  sqlite.exec('PRAGMA foreign_keys=ON');
+  for(const name of ['schema.sql','smoke-six-call-d1-schema.review.sql',
+   'smoke-six-call-owner-prepare-index.review.sql'])
+   sqlite.exec(readFileSync(new URL('./'+name,import.meta.url),'utf8'));
+  sqlite.exec('CREATE TABLE local_verified_artifacts (stage_index INTEGER PRIMARY KEY, digest TEXT NOT NULL, output TEXT NOT NULL)');
+  const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+  const smoke='28c379e8-e759-4b2f-8300-e7a4c8b39b83';
+  sqlite.prepare(`INSERT INTO swarm_smoke_control_runs(
+    run_id,owner_id,task_receipt_id,account_id,worker_name,database_id,
+    baseline_version,smoke_version,phase,created_at_ms,updated_at_ms,expires_at_ms)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(runId,ownerId,receipt,
+    DISCORD_SMOKE_TARGET.accountId,DISCORD_SMOKE_TARGET.worker,
+    DISCORD_SMOKE_TARGET.databaseId,baseline,smoke,'ACTIVE',now,now,expiry);
+  const db={prepare(q){const statement=sqlite.prepare(q);
+   return {bind(...args){return {
+    first:async()=>statement.get(...args)??null,
+    run:async()=>statement.run(...args)
+   };}};}};
+  const store=createD1SixCallStore({db,runId});
+  let calls=0;
+  const env=settings();
+  env.AI={run:async(model,input)=>{
+   assert.equal(model,GPT_OSS_MODEL);
+   assert.equal(input.max_tokens,360);
+   calls++;
+   return {response:'承認済みローカルテスト役割 '+calls};
+  }};
+  const provider=createStagedSixCallAIProvider({
+   env,clock:()=>now+100,
+   loadVerifiedTask:async details=>{
+    const previous=sqlite.prepare('SELECT output FROM local_verified_artifacts WHERE stage_index=?').get(details.stageIndex-1);
+    return {
+     ...details,source:'SERVER_D1_VERIFIED_OWNER_TASK',
+     ownerId,expiryMs:expiry,checkedAtMs:now,
+     previousStageFinalVerified:details.stageIndex===0||!!previous,
+     legacyHistoricalUnknownImmutable:true,
+     originalTask:'Discordサーバーの安全な管理方針',
+     previousConfirmedOutput:previous?.output||''
+    };
+   },
+   persistVerifiedOutput:async data=>{
+    sqlite.prepare('INSERT INTO local_verified_artifacts (stage_index,digest,output) VALUES(?,?,?)')
+      .run(data.stageIndex,data.digest,data.text);
+    const row=sqlite.prepare('SELECT digest,output FROM local_verified_artifacts WHERE stage_index=?')
+      .get(data.stageIndex);
+    return {...data,saved:row.digest===data.digest&&row.output===data.text};
+   }
+  });
+  const liveEvidence={collect:async()=>{
+   const state=await store.read();
+   return {
+    status:'VERIFIED_FROM_TRUSTED_ADAPTER',checkedAtMs:now,target:DISCORD_SMOKE_TARGET,
+    runId,taskReceiptId:receipt,activeVersion:smoke,baselineVersion:baseline,
+    expiresAtMs:expiry,ownerOauthCsrfVerified:true,
+    newExplicitOwnerConsentVerified:true,watchdogIndependentlyPrearmed:true,
+    watchdogLiveRestoreTested:true,releaseLockFencingVerified:true,
+    remoteFourFlagsEnabledAndBounded:true,d1HistoryUnknownExactlyPreserved:true,
+    legacyActiveJobs:0,otherSixRoleJobs:0,pendingStopJobs:0,
+    accountPlanFreeVerified:true,modelAvailableVerified:true,
+    accountWideSixCallsFreeMarginVerified:true,unrelatedAiIdleVerified:true,
+    githubActiveReleaseRuns:0,emergencyStopReachable:true
+   };
+  }};
+  const statuses=[];
+  for(let i=0;i<6;i++){
+   const result=await runSixCallStep({store,liveEvidence,provider,clock:()=>now+101});
+   statuses.push(result.status);
+   assert.equal(result.attempts,i+1);
+   assert.equal(result.completed,i+1);
+  }
+  assert.deepEqual(statuses,[
+   'STEP_COMPLETE','STEP_COMPLETE','STEP_COMPLETE',
+   'STEP_COMPLETE','STEP_COMPLETE','SIX_CALL_LIMIT_REACHED'
+  ]);
+  assert.equal(calls,6);
+  const rows=sqlite.prepare('SELECT count(*) AS n FROM local_verified_artifacts').get().n;
+  assert.equal(rows,6);
+  assert.equal(sqlite.prepare('SELECT count(*) AS n FROM swarm_smoke_control_claims').get().n,6);
+  assert.equal(sqlite.prepare('SELECT coalesce(sum(reserved),0) AS n FROM swarm_budget_days').get().n,6);
+  assert.equal((await store.read()).phase,'RESTORE_REQUIRED');
+  assert.equal((await runSixCallStep({store,liveEvidence,provider,clock:()=>now+101})).status,'BLOCKED');
+  assert.equal(calls,6);
+ }finally{sqlite.close();}
 });
