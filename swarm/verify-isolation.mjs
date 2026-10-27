@@ -31,7 +31,20 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const reviewedHistoricalPreflight=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-reviewed-unknown-preflight-20261024';
   const githubOwnerReviewFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/swarm-owner-review-github-proof-20261024';
   const readOnlyHistoricalFix=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/discord-historical-unknown-readonly-20261025';
-  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix)
+  const sixCallController=base==='feature/discord-historical-unknown-readonly-20261025'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-controller-20261026';
+  const sixCallD1=base==='feature/discord-six-call-controller-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-d1-store-20261026';
+  const ownerPrepare=base==='feature/discord-six-call-d1-store-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-owner-prepare-20261026';
+  const safeStop=base==='feature/discord-six-call-owner-prepare-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-safe-stop-reconcile-20261026';
+  const releaseFence=base==='feature/discord-six-call-safe-stop-reconcile-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-release-fence-20261026';
+  const quotaReview=base==='feature/discord-six-call-release-fence-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-provider-quota-evidence-20261026';
+  const githubReadOnly=base==='feature/discord-six-call-provider-quota-evidence-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-github-readonly-20261026';
+  const d1ReadOnly=base==='feature/discord-six-call-github-readonly-20261026'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-d1-readonly-audit-20261027';
+  const workerGet=base==='feature/discord-six-call-d1-readonly-audit-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-worker-get-audit-20261027';
+  const crossEvidence=base==='feature/discord-six-call-worker-get-audit-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-cross-evidence-20261027';
+  const ddlIntegrity=base==='feature/discord-six-call-cross-evidence-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-d1-ddl-integrity-20261027';
+  const postClaimStop=base==='feature/discord-six-call-d1-ddl-integrity-20261027'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-postclaim-stop-20261027';
+  const reviewedFinalBundle=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-postclaim-stop-20261027';
+  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop&&!releaseFence&&!quotaReview&&!githubReadOnly&&!d1ReadOnly&&!workerGet&&!crossEvidence&&!ddlIntegrity&&!postClaimStop&&!reviewedFinalBundle)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -57,7 +70,154 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const reviewedPreflightPaths=new Set(['swarm/smoke-live-preflight.mjs','swarm/smoke-live-preflight.test.mjs','swarm/verify-isolation.mjs']);
   const githubReviewPaths=new Set(['swarm/smoke-owner-approval.mjs','swarm/smoke-owner-approval.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-offline-tests.yml']);
   const readOnlyHistoricalPaths=new Set(['swarm/smoke-historical-evidence-readonly.mjs','swarm/smoke-historical-evidence-readonly.test.mjs','swarm/smoke-reviewed-unknown-safe-off.mjs','swarm/smoke-reviewed-unknown-safe-off.test.mjs','swarm/smoke-reviewed-unknown-safe-off-collector.mjs','swarm/smoke-reviewed-unknown-safe-off-collector.test.mjs','swarm/smoke-one-shot-offline-simulator.mjs','swarm/smoke-one-shot-offline-simulator.test.mjs','swarm/smoke-readonly-collector.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-offline-tests.yml']);
-  const illegal=paths.filter(path=>readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
+  const sixCallFiles=new Set(['swarm/smoke-six-call-controller.mjs','swarm/smoke-six-call-controller.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-six-call-controller-offline.yml','swarm/SMOKE_SIX_CALL_CONTROLLER_STATUS.md']);
+  const sixCallD1Files=new Set(['swarm/smoke-six-call-d1-schema.review.sql','swarm/smoke-six-call-d1-store.mjs','swarm/smoke-six-call-d1-store.test.mjs','swarm/verify-isolation.mjs','.github/workflows/swarm-six-call-d1-store-offline.yml','swarm/SMOKE_SIX_CALL_D1_STATUS.md']);
+  const ownerPrepareFiles=new Set([
+    'swarm/smoke-six-call-owner-prepare.mjs',
+    'swarm/smoke-six-call-owner-prepare.test.mjs',
+    'swarm/smoke-six-call-owner-prepare-index.review.sql',
+    'swarm/SMOKE_SIX_CALL_OWNER_PREPARE_STATUS.md',
+    'swarm/verify-isolation.mjs',
+    '.github/workflows/swarm-six-call-owner-prepare-offline.yml'
+  ]);
+  const safeStopFiles=new Set([
+    'swarm/smoke-six-call-d1-schema.review.sql',
+    'swarm/smoke-six-call-d1-store.mjs',
+    'swarm/smoke-six-call-controller.mjs',
+    'swarm/smoke-six-call-reconcile.mjs',
+    'swarm/smoke-six-call-stop-reconcile.test.mjs',
+    'swarm/smoke-six-call-owner-stop.mjs',
+    'swarm/smoke-six-call-owner-stop.test.mjs',
+    'swarm/smoke-six-call-owner-prepare.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_SAFE_STOP_STATUS.md',
+    '.github/workflows/swarm-six-call-safe-stop-offline.yml'
+  ]);
+  const releaseFenceFiles=new Set([
+    'swarm/smoke-six-call-release-fence.mjs',
+    'swarm/smoke-six-call-release-fence.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_RELEASE_FENCE_STATUS.md',
+    '.github/workflows/swarm-six-call-release-fence-offline.yml'
+  ]);
+  const quotaReviewFiles=new Set([
+    'swarm/smoke-six-call-free-neuron-review.mjs',
+    'swarm/smoke-six-call-free-neuron-review.test.mjs',
+    'swarm/smoke-six-call-readiness-report.mjs',
+    'swarm/smoke-six-call-readiness-report.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_FREE_NEURON_READINESS.md',
+    '.github/workflows/swarm-six-call-quota-evidence-offline.yml'
+  ]);
+  const githubReadOnlyFiles=new Set([
+    'swarm/smoke-six-call-github-readonly.mjs',
+    'swarm/smoke-six-call-github-readonly.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_GITHUB_READONLY_STATUS.md',
+    '.github/workflows/swarm-six-call-github-readonly-offline.yml'
+  ]);
+  const d1ReadOnlyFiles=new Set([
+    'swarm/smoke-six-call-d1-readonly-audit.mjs',
+    'swarm/smoke-six-call-d1-readonly-audit.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_REMOTE_D1_READONLY_STATUS.md',
+    '.github/workflows/swarm-six-call-d1-readonly-audit-offline.yml'
+  ]);
+  const workerGetFiles=new Set([
+    'swarm/smoke-six-call-worker-get-audit.mjs',
+    'swarm/smoke-six-call-worker-get-audit.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_WORKER_GET_STATUS.md',
+    '.github/workflows/swarm-six-call-worker-get-offline.yml'
+  ]);
+  const crossEvidenceFiles=new Set([
+    'swarm/smoke-six-call-cross-evidence.mjs',
+    'swarm/smoke-six-call-cross-evidence.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_CROSS_EVIDENCE_STATUS.md',
+    '.github/workflows/swarm-six-call-cross-evidence-offline.yml'
+  ]);
+  const ddlIntegrityFiles=new Set([
+    'swarm/smoke-six-call-d1-ddl-digest.mjs',
+    'swarm/smoke-six-call-d1-ddl-digest.test.mjs',
+    'swarm/smoke-six-call-d1-readonly-audit.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_D1_DDL_INTEGRITY.md',
+    '.github/workflows/swarm-six-call-d1-ddl-integrity-offline.yml'
+  ]);
+  const postClaimStopFiles=new Set([
+    'swarm/smoke-six-call-controller.mjs',
+    'swarm/smoke-six-call-postclaim-stop.test.mjs',
+    'swarm/smoke-six-call-migration-acceptance.test.mjs',
+    'swarm/smoke-six-call-github-readonly.mjs',
+    'swarm/smoke-six-call-github-readonly.test.mjs',
+    'swarm/verify-isolation.mjs',
+    'swarm/SMOKE_SIX_CALL_POSTCLAIM_STOP_REVIEW.md',
+    '.github/workflows/swarm-six-call-postclaim-stop-offline.yml'
+  ]);
+  // One-time cumulative offline-only integration after reviewed #21.
+  // Exact 55 paths from main..final SHA, no prod entrypoint or live workflow.
+  const reviewedBundleFiles=new Set([
+    ".github/workflows/swarm-six-call-controller-offline.yml",
+    ".github/workflows/swarm-six-call-cross-evidence-offline.yml",
+    ".github/workflows/swarm-six-call-d1-ddl-integrity-offline.yml",
+    ".github/workflows/swarm-six-call-d1-readonly-audit-offline.yml",
+    ".github/workflows/swarm-six-call-d1-store-offline.yml",
+    ".github/workflows/swarm-six-call-github-readonly-offline.yml",
+    ".github/workflows/swarm-six-call-owner-prepare-offline.yml",
+    ".github/workflows/swarm-six-call-postclaim-stop-offline.yml",
+    ".github/workflows/swarm-six-call-quota-evidence-offline.yml",
+    ".github/workflows/swarm-six-call-release-fence-offline.yml",
+    ".github/workflows/swarm-six-call-safe-stop-offline.yml",
+    ".github/workflows/swarm-six-call-worker-get-offline.yml",
+    "swarm/SMOKE_SIX_CALL_CONTROLLER_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_CROSS_EVIDENCE_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_D1_DDL_INTEGRITY.md",
+    "swarm/SMOKE_SIX_CALL_D1_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_FREE_NEURON_READINESS.md",
+    "swarm/SMOKE_SIX_CALL_GITHUB_READONLY_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_OWNER_PREPARE_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_POSTCLAIM_STOP_REVIEW.md",
+    "swarm/SMOKE_SIX_CALL_RELEASE_FENCE_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_REMOTE_D1_READONLY_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_SAFE_STOP_STATUS.md",
+    "swarm/SMOKE_SIX_CALL_WORKER_GET_STATUS.md",
+    "swarm/smoke-six-call-controller.mjs",
+    "swarm/smoke-six-call-controller.test.mjs",
+    "swarm/smoke-six-call-cross-evidence.mjs",
+    "swarm/smoke-six-call-cross-evidence.test.mjs",
+    "swarm/smoke-six-call-d1-ddl-digest.mjs",
+    "swarm/smoke-six-call-d1-ddl-digest.test.mjs",
+    "swarm/smoke-six-call-d1-readonly-audit.mjs",
+    "swarm/smoke-six-call-d1-readonly-audit.test.mjs",
+    "swarm/smoke-six-call-d1-schema.review.sql",
+    "swarm/smoke-six-call-d1-store.mjs",
+    "swarm/smoke-six-call-d1-store.test.mjs",
+    "swarm/smoke-six-call-free-neuron-review.mjs",
+    "swarm/smoke-six-call-free-neuron-review.test.mjs",
+    "swarm/smoke-six-call-github-readonly.mjs",
+    "swarm/smoke-six-call-github-readonly.test.mjs",
+    "swarm/smoke-six-call-migration-acceptance.test.mjs",
+    "swarm/smoke-six-call-owner-prepare-index.review.sql",
+    "swarm/smoke-six-call-owner-prepare.mjs",
+    "swarm/smoke-six-call-owner-prepare.test.mjs",
+    "swarm/smoke-six-call-owner-stop.mjs",
+    "swarm/smoke-six-call-owner-stop.test.mjs",
+    "swarm/smoke-six-call-postclaim-stop.test.mjs",
+    "swarm/smoke-six-call-readiness-report.mjs",
+    "swarm/smoke-six-call-readiness-report.test.mjs",
+    "swarm/smoke-six-call-reconcile.mjs",
+    "swarm/smoke-six-call-release-fence.mjs",
+    "swarm/smoke-six-call-release-fence.test.mjs",
+    "swarm/smoke-six-call-stop-reconcile.test.mjs",
+    "swarm/smoke-six-call-worker-get-audit.mjs",
+    "swarm/smoke-six-call-worker-get-audit.test.mjs",
+    "swarm/verify-isolation.mjs"
+]);
+  if(reviewedFinalBundle&&(paths.length!==reviewedBundleFiles.size||
+      new Set(paths).size!==paths.length))
+    throw Error('Cumulative offline integration file count differs from reviewed SHA');
+  const illegal=paths.filter(path=>reviewedFinalBundle ? !reviewedBundleFiles.has(path) : postClaimStop ? !postClaimStopFiles.has(path) : ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));

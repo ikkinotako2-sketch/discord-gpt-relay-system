@@ -1,0 +1,36 @@
+name: Discord Six-Call D1 Read-Only Schema Audit OFFLINE (NO LIVE)
+on:
+  pull_request:
+    paths:
+      - 'swarm/smoke-six-call-d1-readonly-audit.mjs'
+      - 'swarm/smoke-six-call-d1-readonly-audit.test.mjs'
+      - 'swarm/verify-isolation.mjs'
+      - 'swarm/SMOKE_SIX_CALL_REMOTE_D1_READONLY_STATUS.md'
+      - '.github/workflows/swarm-six-call-d1-readonly-audit-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Protect all production Worker and unrelated integrations
+        run: node swarm/verify-isolation.mjs
+      - name: Syntax check
+        run: |
+          node --check swarm/smoke-six-call-d1-readonly-audit.mjs
+          node --check swarm/smoke-six-call-d1-readonly-audit.test.mjs
+      - name: Local SQLite metadata and ledger audit tests — no remote D1 calls
+        run: |
+          node --test swarm/smoke-six-call-d1-readonly-audit.test.mjs \
+            swarm/smoke-six-call-github-readonly.test.mjs
+      - name: Assert GET/SELECT-only module remains offline
+        run: |
+          ! grep -R -E "smoke-six-call-d1-readonly-audit" worker-loop.mjs command-center/server.mjs swarm/api.mjs swarm/runner.mjs swarm/cron.mjs
+          echo 'NO_PRODUCTION_D1_API_NO_MIGRATION_NO_INFERENCE'
