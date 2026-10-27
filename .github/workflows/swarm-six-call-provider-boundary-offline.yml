@@ -5,6 +5,7 @@ on:
       - 'swarm/smoke-six-call-provider-adapter.mjs'
       - 'swarm/smoke-six-call-provider-adapter.test.mjs'
       - 'swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md'
+      - 'swarm/verify-isolation.mjs'
       - '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
 permissions:
   contents: read
@@ -17,7 +18,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Exact four-file isolation
+      - name: Exact five-file isolation
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -29,12 +30,13 @@ jobs:
             'swarm/smoke-six-call-provider-adapter.mjs',
             'swarm/smoke-six-call-provider-adapter.test.mjs',
             'swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md',
+            'swarm/verify-isolation.mjs',
             '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
           ]);
           const files=readFileSync('/tmp/adapter-changes.txt','utf8').trim().split('\n');
-          if(files.length!==4||new Set(files).size!==4||files.some(p=>!allowed.has(p)))
+          if(files.length!==5||new Set(files).size!==5||files.some(p=>!allowed.has(p)))
             throw Error('UNREVIEWED_PROVIDER_CHANGE_SCOPE');
-          console.log('PROVIDER_BOUNDARY_FOUR_FILE_ISOLATION_PASS');
+          console.log('PROVIDER_BOUNDARY_FIVE_FILE_ISOLATION_PASS');
           NODE
       - name: Syntax + fake Workers AI and real SQLite controller integration
         run: |
