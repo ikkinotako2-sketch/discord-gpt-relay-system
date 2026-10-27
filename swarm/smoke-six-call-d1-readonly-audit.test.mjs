@@ -57,7 +57,7 @@ test('unapplied migration is detected using ONE metadata SELECT',async()=>{
 test('complete proposed schema exists: still requires independent review',async()=>{
  const f=fixture({migrated:true});try{
   const result=await collectSixCallD1ReadOnly(options(f));
-  assert.equal(result.status,'MIGRATION_OBJECTS_PRESENT_REVIEW_REQUIRED');
+  assert.equal(result.status,'MIGRATION_OBJECTS_PRESENT_REVIEW_REQUIRED',JSON.stringify(result));
   assert.equal(result.schemaObjectCount,D1_CONTROL_SCHEMA_NAMES.length);
   assert.deepEqual(f.queries,[D1_SCHEMA_SELECT,D1_STATE_SELECT]);
   assert.equal(result.counts.runs,0);
@@ -78,7 +78,7 @@ test('new active smoke reservation detected without exposing owner/job payload',
    (run_id,stage_index,owner_id,utc_day,claimed_at_ms)
    VALUES(?,?,?,?,?)`).run(RUN,0,owner,'2026-10-27',now+10);
   const result=await collectSixCallD1ReadOnly(options(f));
-  assert.equal(result.status,'CONTROL_JOBS_REQUIRE_MANUAL_REVIEW');
+  assert.equal(result.status,'CONTROL_JOBS_REQUIRE_MANUAL_REVIEW',JSON.stringify(result));
   assert.equal(result.counts.reserved_attempts,1);
   assert.equal(result.counts.in_flight_runs,1);
   assert.equal(result.counts.claimed_unresolved,1);
