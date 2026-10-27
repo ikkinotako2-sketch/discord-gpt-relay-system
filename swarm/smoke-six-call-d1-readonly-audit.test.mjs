@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {collectSixCallD1ReadOnly,D1_SCHEMA_SELECT,D1_STATE_SELECT,
- D1_CONTROL_SCHEMA_NAMES} from './smoke-six-call-d1-readonly-audit.mjs';
+ D1_CONTROL_SCHEMA_NAMES,D1_OUTPUT_DIGEST_SELECT} from './smoke-six-call-d1-readonly-audit.mjs';
 import {DISCORD_D1_URL} from './smoke-watchdog-d1.mjs';
 import {DISCORD_SMOKE_TARGET as T} from './smoke-restore-guard.mjs';
 
@@ -13,6 +13,11 @@ const RUN='review_only_run_20261027';
 const V1='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
 const V2='28c379e8-e759-4b2f-8300-e7a4c8b39b83';
 const sqlText=name=>readFileSync(new URL('./'+name,import.meta.url),'utf8');
+async function sha256(text){
+ const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+ return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 function fixture({migrated=false}={}){
  const sqlite=new DatabaseSync(':memory:');
  sqlite.exec('PRAGMA foreign_keys=ON');
@@ -101,7 +106,12 @@ test('output artifact provenance rejects forged receipt, revision and out-of-win
   {name:'different owner task receipt',patch:{task_receipt_id:'receipt_other_20261027'},expected:'BLOCKED'},
   {name:'forged claim revision',patch:{claim_revision:77},expected:'BLOCKED'},
   {name:'saved before claim',patch:{saved_at_ms:now+9},expected:'BLOCKED'},
-  {name:'saved at expiry',patch:{saved_at_ms:now+19*60*1000},expected:'BLOCKED'}
+  {name:'saved at expiry',patch:{saved_at_ms:now+19*60*1000},expected:'BLOCKED'},
+  {name:'same-length changed final_text',patch:{final_text:'fixturE'},
+   expected:'BLOCKED',reason:'D1_OUTPUT_CONTENT_DIGEST_OR_READBACK_UNVERIFIED'},
+  {name:'forged digest and matching receipt',patch:{
+   digest_sha256:'b'.repeat(64),receipt_id:'final_'+'b'.repeat(40)},
+   expected:'BLOCKED',reason:'D1_OUTPUT_CONTENT_DIGEST_OR_READBACK_UNVERIFIED'}
  ];
  for(const v of variants){
   const f=fixture({migrated:true});
@@ -120,7 +130,7 @@ test('output artifact provenance rejects forged receipt, revision and out-of-win
    f.sqlite.prepare(`INSERT INTO swarm_smoke_control_claims
     (run_id,stage_index,owner_id,utc_day,claimed_at_ms)
     VALUES(?,?,?,?,?)`).run(RUN,0,owner,'2026-10-27',now+10);
-   const digest='a'.repeat(64);
+   const digest=await sha256('fixture');
    const data={run_id:RUN,stage_index:0,owner_id:owner,
     task_receipt_id:receipt,claim_revision:1,digest_sha256:digest,
     receipt_id:'final_'+digest.slice(0,40),final_text:'fixture',saved_at_ms:now+11,
@@ -135,7 +145,11 @@ test('output artifact provenance rejects forged receipt, revision and out-of-win
    const result=await collectSixCallD1ReadOnly(options(f));
    assert.equal(result.status,v.expected,v.name+': '+JSON.stringify(result));
    if(v.expected==='BLOCKED')
-    assert.equal(result.reason,'D1_CONTROL_COUNTERS_INCONSISTENT',v.name);
+    assert.equal(result.reason,v.reason||'D1_CONTROL_COUNTERS_INCONSISTENT',v.name);
+   if(v.name==='correct in-flight artifact'){
+    assert.equal(f.queries.at(-1),D1_OUTPUT_DIGEST_SELECT);
+    assert.equal(JSON.stringify(result).includes('fixture'),false);
+   }
    assert.equal(result.authorizesInference,false);
   }finally{f.sqlite.close();}
  }
