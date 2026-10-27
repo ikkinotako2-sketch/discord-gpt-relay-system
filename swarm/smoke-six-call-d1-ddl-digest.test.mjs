@@ -14,6 +14,7 @@ function schema(){
  db.exec(readFileSync(new URL('./smoke-six-call-d1-schema.review.sql',import.meta.url),'utf8'));
  db.exec(readFileSync(new URL('./smoke-six-call-owner-prepare-index.review.sql',import.meta.url),'utf8'));
  db.exec(readFileSync(new URL('./smoke-six-call-output-artifacts.review.sql',import.meta.url),'utf8'));
+ db.exec(readFileSync(new URL('./smoke-six-call-owner-task-source.review.sql',import.meta.url),'utf8'));
  const rows=db.prepare(D1_SCHEMA_SELECT).all();return {db,rows};
 }
 function mock(db,{changeRows=x=>x}={}){
@@ -38,7 +39,7 @@ const collect=(db,opts={})=>{
   d1ReadToken:'test-read-token-for-offline',fetchImpl:m.fetchImpl,
   clock:()=>now}),requests:m.queries};
 };
-test('generated from actual local SQLite DDL, pinned sha256 matches all seven objects',async()=>{
+test('generated from actual local SQLite DDL, pinned sha256 matches all eleven objects',async()=>{
  const f=schema();try{
   const actual=Object.fromEntries(f.rows.map(({name,sql})=>[
    name,createHash('sha256').update(sql).digest('hex')
@@ -46,7 +47,7 @@ test('generated from actual local SQLite DDL, pinned sha256 matches all seven ob
   // Printed once in offline CI so final reviewed manifest can pin exactly
   // the DDL SQLite itself stores, rather than a guessed reformatting.
   console.log('REVIEWED_SIX_CALL_DDL_SHA256_MANIFEST',JSON.stringify(actual));
-  assert.equal(f.rows.length,7);
+  assert.equal(f.rows.length,11);
   assert.deepEqual(actual,D1_SMOKE_EXPECTED_DDL_SHA256);
   assert.equal(await attestSixCallD1SqlDefinitions(f.rows),true);
  }finally{f.db.close();}
@@ -80,6 +81,23 @@ test('weakening output digest length with the same output table identity is reje
       'CHECK(length(digest_sha256)=1)')}:x)});
   const r=await collector;
   assert.equal(r.reason,'D1_SQLITE_CONTROL_DDL_MISMATCH_OR_UNPINNED');
+ }finally{f.db.close();}
+});
+test('tampered immutable owner task scope/UPDATE/DELETE triggers are rejected',async()=>{
+ const f=schema();try{
+  for(const name of [
+   'swarm_smoke_control_owner_task_scope',
+   'swarm_smoke_control_owner_task_no_update',
+   'swarm_smoke_control_owner_task_no_delete'
+  ]){
+   const {collector}=collect(f.db,{changeRows:rows=>
+    rows.map(x=>x.name===name?{...x,sql:x.sql+' -- weakened'}:x)});
+   const r=await collector;
+   assert.equal(r.reason,'D1_SQLITE_CONTROL_DDL_MISMATCH_OR_UNPINNED',name);
+  }
+  const {collector}=collect(f.db,{changeRows:rows=>
+   rows.filter(x=>x.name!=='swarm_smoke_control_owner_tasks')});
+  assert.equal((await collector).reason,'PARTIAL_D1_CONTROL_MIGRATION_UNSAFE');
  }finally{f.db.close();}
 });
 test('weakening CHECK attempt limit with same table identity is rejected',async()=>{
