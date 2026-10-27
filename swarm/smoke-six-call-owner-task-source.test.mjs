@@ -138,13 +138,17 @@ test('STOP after claim before owner task lookup blocks the provider and consumes
   const provider=createStagedSixCallAIProvider({
    env:f.env,clock:()=>now+12,
    loadVerifiedTask:async request=>{
-    if(!once){once=true;await f.store.requestStopOnce({runId,ownerId,nowMs:now+10});}
+    if(!once){
+      once=true;
+      const stop=await f.store.requestStopOnce({runId,ownerId,nowMs:now+15});
+      assert.equal(stop.status,'STOP_RECORDED');
+    }
     return original(request);
    },
    persistVerifiedOutput:f.output.persistVerifiedOutput
   });
   const result=await runSixCallStep({store:f.store,
-   liveEvidence:f.liveEvidence,provider,clock:()=>now+13});
+   liveEvidence:f.liveEvidence,provider,clock:(()=>{let t=now+12;return ()=>++t;})()});
   assert.equal(result.status,'UNKNOWN_STOP');
   assert.equal(f.modelCalls(),0);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM swarm_smoke_control_outputs').get().n,0);
