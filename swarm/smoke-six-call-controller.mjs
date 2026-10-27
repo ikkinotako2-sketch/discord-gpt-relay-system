@@ -24,7 +24,7 @@ export function makeSixCallCandidate({runId,taskReceiptId,baselineVersion,smokeV
  return Object.freeze({schema:'discord-six-call.v1',phase:'PENDING_EXTERNAL_ACTIVATION',
    runId,taskReceiptId,baselineVersion,smokeVersion,
    target:DISCORD_SMOKE_TARGET,createdAtMs:nowMs,expiresAtMs,
-   attempts:0,completed:0,revision:0,inFlightIndex:null,
+   attempts:0,completed:0,revision:0,inFlightIndex:null,stopRequested:false,
    historicalUnknownPreserved:true,authorizesDeployment:false,
    authorizesInference:false});
 }
@@ -43,7 +43,7 @@ function validateState(s,now){
    !Number.isSafeInteger(s.attempts)||s.attempts<0||
    s.attempts>=SMOKE_ATTEMPT_LIMIT||
    s.completed!==s.attempts||s.inFlightIndex!==null||
-   s.stopRequested===true||s.historicalUnknownPreserved!==true||
+   s.stopRequested!==false||s.historicalUnknownPreserved!==true||
    s.authorizesInference!==false||s.authorizesDeployment!==false)
    return false;
  return true;
@@ -108,6 +108,26 @@ export async function runSixCallStep({store,liveEvidence,provider,clock=Date.now
    return blocked('ATOMIC_CLAIM_UNVERIFIED_DO_NOT_RETRY');
  let outcome='UNKNOWN';
  try{
+   // An owner STOP can arrive after the durable claim but before invocation.
+   // Re-read live D1: if STOP, expiry, fencing change or read failure is seen,
+   // consume this already-reserved attempt as UNKNOWN rather than invoke AI.
+   // This narrows the race; a STOP after this read may still overlap a call
+   // already in flight and requires independent Watchdog/manual recovery.
+   const rechecked=await store.read();
+   if(!rechecked||rechecked.schema!=='discord-six-call.v1'||
+      rechecked.runId!==s.runId||
+      rechecked.taskReceiptId!==s.taskReceiptId||
+      !identical(DISCORD_SMOKE_TARGET,rechecked.target)||
+      rechecked.baselineVersion!==s.baselineVersion||
+      rechecked.smokeVersion!==s.smokeVersion||
+      rechecked.expiresAtMs!==s.expiresAtMs||
+      rechecked.phase!=='ACTIVE'||rechecked.stopRequested!==false||
+      rechecked.attempts!==index+1||rechecked.completed!==index||
+      rechecked.inFlightIndex!==index||
+      rechecked.revision!==claim.revision||
+      rechecked.authorizesInference!==false||
+      rechecked.authorizesDeployment!==false)
+      throw Error('DURABLE_CLAIM_POSTCHECK_OR_STOP_FAILED');
    // Atomic claim may have been delayed. Never invoke after window expiry.
    const beforeInvoke=clock();
    if(!ms(beforeInvoke)||beforeInvoke<claimTime||beforeInvoke>=s.expiresAtMs)
