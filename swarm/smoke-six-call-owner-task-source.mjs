@@ -150,12 +150,14 @@ export function createStagedD1OwnerTaskReader({
    const fresh=await db.prepare(LOAD).bind(
      runId,request.taskReceiptId,ownerId,i).first();
    if(!fresh||fresh.phase!=='ACTIVE'||fresh.stop_requested!==0||
-      fresh.claim_state!=='CLAIMED'||fresh.revision!==request.claimRevision||
+      fresh.claim_state!=='CLAIMED'||fresh.claim_owner_id!==ownerId||
+      fresh.stage_index!==i||fresh.revision!==request.claimRevision||
       fresh.in_flight_index!==i||fresh.attempts!==i+1||
       fresh.completed!==i||fresh.run_id!==r.run_id||
       fresh.owner_id!==r.owner_id||fresh.task_receipt_id!==r.task_receipt_id||
       fresh.account_id!==r.account_id||fresh.worker_name!==r.worker_name||
       fresh.database_id!==r.database_id||
+      fresh.created_at_ms!==r.created_at_ms||
       fresh.expires_at_ms!==r.expires_at_ms||
       fresh.original_task!==r.original_task||
       fresh.task_created_at_ms!==r.task_created_at_ms)
