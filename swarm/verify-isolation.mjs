@@ -148,6 +148,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/smoke-six-call-controller.mjs',
     'swarm/smoke-six-call-postclaim-stop.test.mjs',
     'swarm/smoke-six-call-migration-acceptance.test.mjs',
+    'swarm/smoke-six-call-github-readonly.mjs',
+    'swarm/smoke-six-call-github-readonly.test.mjs',
     'swarm/verify-isolation.mjs',
     'swarm/SMOKE_SIX_CALL_POSTCLAIM_STOP_REVIEW.md',
     '.github/workflows/swarm-six-call-postclaim-stop-offline.yml'
