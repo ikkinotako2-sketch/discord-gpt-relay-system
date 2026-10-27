@@ -204,6 +204,31 @@ test('independent original full-row pin is mandatory and a forged digest is reje
   assert.equal(f.modelCalls(),0);
  }finally{f.sql.close();}
 });
+test('mutating caller-owned original UNKNOWN pin after reader creation cannot launder a changed row',async()=>{
+ const f=setup();
+ try{
+  const mutablePin={...f.independentlyPinnedUnknown};
+  const reader=createStagedD1OwnerTaskReader({
+   db:f.db,runId,ownerId,independentlyPinnedUnknown:mutablePin,
+   clock:()=>now+11
+  });
+  // Attack: change D1 task to a different same-length value, then replace
+  // the original pin object's digest with the hash of that changed row.
+  // The reader MUST still use the captured original digest.
+  f.sql.prepare("UPDATE swarm_jobs SET task='historical tAsk' WHERE status='unknown'").run();
+  Object.assign(mutablePin,independentlyPinOriginalFixture(f.sql));
+  const provider=createStagedSixCallAIProvider({
+   env:f.env,loadVerifiedTask:reader.loadVerifiedTask,
+   persistVerifiedOutput:f.output.persistVerifiedOutput,clock:()=>now+12
+  });
+  const result=await runSixCallStep({store:f.store,
+   liveEvidence:f.liveEvidence,provider,clock:()=>now+13});
+  assert.equal(result.status,'UNKNOWN_STOP');
+  assert.equal(f.modelCalls(),0);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM swarm_smoke_control_outputs').get().n,0);
+  assert.equal(f.sql.prepare('SELECT sum(reserved) n FROM swarm_budget_days').get().n,1);
+ }finally{f.sql.close();}
+});
 test('same-length historical history, task, and run-id substitutions are all blocked',async t=>{
  const variants=[
   ["history_json='{}'",'same-length history'],
