@@ -224,6 +224,24 @@ test('same-length historical history, task, and run-id substitutions are all blo
   });
  }
 });
+test('oversized second UNKNOWN cannot be hidden by a row-size SQL filter',async()=>{
+ const f=setup();
+ try{
+  f.sql.prepare(`INSERT INTO swarm_jobs
+  (run_id,owner_id,task,cycles,status,calls_used,revision,history_json,
+  checkpoint,stop_requested,active_slot,last_error,created_at,updated_at,expires_at)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+   'extra_oversized_unknown',ownerId,'other',1,'unknown',0,0,
+   'x'.repeat(65537),'',0,null,'MODEL_OUTCOME_UNKNOWN',
+   now-10000,now-9000,now+10000
+  );
+  const result=await runSixCallStep({store:f.store,
+   liveEvidence:f.liveEvidence,provider:f.provider,clock:()=>now+13});
+  assert.equal(result.status,'UNKNOWN_STOP');
+  assert.equal(f.modelCalls(),0);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM swarm_jobs WHERE status='unknown'").get().n,2);
+ }finally{f.sql.close();}
+});
 test('STOP after claim before owner task lookup blocks the provider and consumes reserved attempt',async()=>{
  const f=setup();
  try{
