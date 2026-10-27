@@ -148,7 +148,7 @@ test('Watchdog secret names must be exactly one each, never copied',async()=>{
  for(const secrets of [null,[],[{name:'WATCHDOG_RESTORE_TOKEN'}],
   [{name:'WATCHDOG_RESTORE_TOKEN'},{name:'WATCHDOG_RESTORE_TOKEN'},
    {name:'WATCHDOG_D1_READ_TOKEN'}]]){
-  const f=mock({mutate:path=>path===DISCORD_WATCHDOG_NAME+'/secrets'?secrets:null});
+  const f=mock({mutate:path=>path===DISCORD_WATCHDOG_NAME+'/secrets'?(secrets===null?[]:secrets):null});
   const r=await collectDiscordWorkerSafeOffGet(options(f));
   assert.equal(r.status,'BLOCKED');
  }
