@@ -54,7 +54,7 @@ jobs:
           "swarm/verify-isolation.mjs",
           ".github/workflows/swarm-six-call-owner-task-source-offline.yml",
           ".github/workflows/swarm-six-call-output-d1-offline.yml"
-]);
+          ]);
           const actual=readFileSync('/tmp/smoke-output-files.txt','utf8').trim().split('\n');
           if(![expected,ownerTaskReview,fingerprintFix].some(s=>actual.length===s.size&&
              new Set(actual).size===s.size&&actual.every(x=>s.has(x))))throw Error('UNREVIEWED_SQL_OR_CODE_PATH');
