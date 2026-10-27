@@ -7,6 +7,7 @@ on:
       - 'swarm/smoke-six-call-owner-task-source.test.mjs'
       - 'swarm/SMOKE_SIX_CALL_OWNER_TASK_READINESS.md'
       - 'swarm/verify-isolation.mjs'
+      - '.github/workflows/swarm-six-call-output-d1-offline.yml'
       - '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
 permissions:
   contents: read
@@ -19,7 +20,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Strict six-file read-only scoped diff
+      - name: Strict seven-file read-only scoped diff
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -33,12 +34,13 @@ jobs:
             'swarm/smoke-six-call-owner-task-source.test.mjs',
             'swarm/SMOKE_SIX_CALL_OWNER_TASK_READINESS.md',
             'swarm/verify-isolation.mjs',
-            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml'
           ]);
           const paths=readFileSync('/tmp/owner-task-changed.txt','utf8').trim().split('\n');
-          if(paths.length!==6||new Set(paths).size!==6||paths.some(x=>!allow.has(x)))
+          if(paths.length!==7||new Set(paths).size!==7||paths.some(x=>!allow.has(x)))
             throw Error('OWNER_TASK_CHANGE_SCOPE_NOT_REVIEWED');
-          console.log('OWNER_TASK_EXACT_SIX_FILE_ISOLATION_PASS');
+          console.log('OWNER_TASK_EXACT_SEVEN_FILE_ISOLATION_PASS');
           NODE
       - name: Six-stage owner task SQLite+fake GPT OSS integration
         run: |
