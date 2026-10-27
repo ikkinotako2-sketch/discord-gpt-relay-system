@@ -252,7 +252,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/smoke-six-call-owner-task-source.test.mjs',
     'swarm/SMOKE_SIX_CALL_OWNER_TASK_READINESS.md',
     'swarm/verify-isolation.mjs',
-    '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+    '.github/workflows/swarm-six-call-owner-task-source-offline.yml',
+    '.github/workflows/swarm-six-call-output-d1-offline.yml'
   ]);
   const illegal=paths.filter(path=>ownerTaskSourceReview ? !ownerTaskSourceFiles.has(path) : outputD1Review ? !outputD1Files.has(path) : providerBoundary ? !providerBoundaryFiles.has(path) : freeOnlyReview ? !freeOnlyReviewFiles.has(path) : reviewedFinalBundle ? !reviewedBundleFiles.has(path) : postClaimStop ? !postClaimStopFiles.has(path) : ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
