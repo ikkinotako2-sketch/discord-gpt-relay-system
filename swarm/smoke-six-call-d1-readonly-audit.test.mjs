@@ -29,7 +29,8 @@ function fixture({migrated=false}={}){
   assert.equal(opts.headers.Authorization,'Bearer test-read-only-token');
   const parsed=JSON.parse(opts.body);
   assert.deepEqual(Object.keys(parsed),['sql']);
-  assert.match(parsed.sql,/^SELECT\\s/);
+  assert.equal(parsed.sql.slice(0,6),'SELECT');
+  assert.ok([9,10,13,32].includes(parsed.sql.charCodeAt(6)));
   assert.doesNotMatch(parsed.sql,/\b(INSERT|UPDATE|DELETE|DROP|ALTER|REPLACE|CREATE|PRAGMA|ATTACH)\b/i);
   queries.push(parsed.sql);
   let rows;
