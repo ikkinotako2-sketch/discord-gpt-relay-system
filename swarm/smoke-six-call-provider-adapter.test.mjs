@@ -31,12 +31,12 @@ function fixture({
  throwAI=false,throwPersist=false,clock=()=>now
 }={}){
  const events=[],env=settings();
- mutateEnv(env);
  env.AI={run:async(model,payload)=>{
   events.push({kind:'AI',model,payload});
   if(throwAI)throw Error('UNVERIFIED_PROVIDER_OUTCOME');
   return result;
  }};
+ mutateEnv(env);
  const loadVerifiedTask=async claim=>{
   events.push({kind:'LOAD',claim});
   const task={
