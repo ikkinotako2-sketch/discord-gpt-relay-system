@@ -34,10 +34,16 @@ const HISTORICAL_UNKNOWN_COLUMNS=Object.freeze([
  'history_json','checkpoint','stop_requested','active_slot','lease_owner',
  'lease_expires_at','last_error','created_at','updated_at','expires_at'
 ]);
-const HISTORICAL_UNKNOWN_SQL=`SELECT ${HISTORICAL_UNKNOWN_COLUMNS.join(',')},
+// Never filter out oversized UNKNOWN rows in WHERE: that could hide an
+// additional UNKNOWN and falsely report exactly one preserved row.
+// Return NULL for oversized fields while still counting their row.
+const HISTORICAL_UNKNOWN_SQL=`SELECT ${HISTORICAL_UNKNOWN_COLUMNS.map(col=>
+ col==='history_json'?"CASE WHEN LENGTH(history_json)<=65536 THEN history_json ELSE NULL END AS history_json":
+ col==='checkpoint'?"CASE WHEN LENGTH(checkpoint)<=65536 THEN checkpoint ELSE NULL END AS checkpoint":
+ col==='task'?"CASE WHEN LENGTH(task)<=4096 THEN task ELSE NULL END AS task":col
+).join(',')},
  LENGTH(history_json) AS history_length,LENGTH(checkpoint) AS checkpoint_length
- FROM swarm_jobs WHERE status='unknown' AND LENGTH(history_json)<=65536
- AND LENGTH(checkpoint)<=65536 AND LENGTH(task)<=4096 LIMIT 2`;
+ FROM swarm_jobs WHERE status='unknown' LIMIT 2`;
 function validIndependentPin(pin){
  return pin&&Object.keys(pin).sort().join(',')==='digestSha256,ownerId,runId'&&
   ID.test(pin.runId||'')&&OWNER.test(pin.ownerId||'')&&
