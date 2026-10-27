@@ -1,0 +1,38 @@
+name: Discord Six-Call Cross-Source Audit OFFLINE (NO LIVE)
+on:
+  pull_request:
+    paths:
+      - 'swarm/smoke-six-call-cross-evidence.mjs'
+      - 'swarm/smoke-six-call-cross-evidence.test.mjs'
+      - 'swarm/verify-isolation.mjs'
+      - 'swarm/SMOKE_SIX_CALL_CROSS_EVIDENCE_STATUS.md'
+      - '.github/workflows/swarm-six-call-cross-evidence-offline.yml'
+permissions:
+  contents: read
+jobs:
+  audit-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact five-file isolated PR
+        run: node swarm/verify-isolation.mjs
+      - name: Syntax checks for fail-closed audit
+        run: |
+          node --check swarm/smoke-six-call-cross-evidence.mjs
+          node --check swarm/smoke-six-call-cross-evidence.test.mjs
+      - name: Cross-source time skew, provider and UNKNOWN fault injection
+        run: |
+          node --test swarm/smoke-six-call-cross-evidence.test.mjs \
+            swarm/smoke-six-call-d1-readonly-audit.test.mjs \
+            swarm/smoke-six-call-worker-get-audit.test.mjs \
+            swarm/smoke-six-call-github-readonly.test.mjs
+      - name: Check no production entrypoint imports
+        run: |
+          ! grep -R "smoke-six-call-cross-evidence" worker-loop.mjs command-center/server.mjs swarm/api.mjs swarm/runner.mjs swarm/cron.mjs
+          echo 'CROSS_SOURCE_READONLY_AUDIT_OFFLINE_NO_LIVE_AUTHORITY'
