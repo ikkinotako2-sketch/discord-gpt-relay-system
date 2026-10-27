@@ -1,0 +1,59 @@
+name: Discord Six-Call Verified D1 Outputs OFFLINE (NO MIGRATION)
+on:
+  pull_request:
+    paths:
+      - 'swarm/smoke-six-call-output-artifacts.review.sql'
+      - 'swarm/smoke-six-call-output-d1.mjs'
+      - 'swarm/smoke-six-call-output-d1.test.mjs'
+      - 'swarm/SMOKE_SIX_CALL_OUTPUT_D1_READINESS.md'
+      - '.github/workflows/swarm-six-call-output-d1-offline.yml'
+      - '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
+      - '.github/workflows/swarm-free-only-planning-offline.yml'
+      - 'swarm/verify-isolation.mjs'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Exact eight-file review scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/smoke-output-files.txt
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const expected=new Set([
+            'swarm/smoke-six-call-output-artifacts.review.sql',
+            'swarm/smoke-six-call-output-d1.mjs',
+            'swarm/smoke-six-call-output-d1.test.mjs',
+            'swarm/SMOKE_SIX_CALL_OUTPUT_D1_READINESS.md',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-free-only-planning-offline.yml',
+            'swarm/verify-isolation.mjs'
+          ]);
+          const actual=readFileSync('/tmp/smoke-output-files.txt','utf8').trim().split('\n');
+          if(actual.length!==expected.size||new Set(actual).size!==expected.size||
+             actual.some(x=>!expected.has(x)))throw Error('UNREVIEWED_SQL_OR_CODE_PATH');
+          console.log('OUTPUT_D1_EIGHT_FILE_SCOPE_PASS');
+          NODE
+      - name: Offline local SQLite verified output tests and six-call regressions
+        run: |
+          node --check swarm/smoke-six-call-output-d1.mjs
+          node --check swarm/smoke-six-call-output-d1.test.mjs
+          node --test swarm/smoke-six-call-output-d1.test.mjs \
+            swarm/smoke-six-call-provider-adapter.test.mjs \
+            swarm/smoke-six-call-postclaim-stop.test.mjs \
+            swarm/smoke-six-call-d1-store.test.mjs \
+            swarm/smoke-six-call-d1-ddl-digest.test.mjs
+      - name: Strictly no production wiring or migrations
+        run: |
+          ! grep -R 'smoke-six-call-output-d1' worker-relay.mjs worker-loop.mjs swarm/cron.mjs swarm/runner.mjs
+          echo 'SIX_CALL_OUTPUT_D1_OFFLINE_ONLY_NO_LIVE_WRITES'

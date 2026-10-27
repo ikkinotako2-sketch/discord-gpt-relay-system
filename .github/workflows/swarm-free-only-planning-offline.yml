@@ -5,7 +5,7 @@ on:
       - 'swarm/smoke-free-only-planning.mjs'
       - 'swarm/smoke-free-only-planning.test.mjs'
       - 'swarm/SMOKE_FREE_ONLY_READINESS.md'
-      - 'swarm/verify-isolation.mjs'
+
       - '.github/workflows/swarm-free-only-planning-offline.yml'
 permissions:
   contents: read
@@ -44,9 +44,19 @@ jobs:
             '.github/workflows/swarm-free-only-planning-offline.yml',
             'swarm/verify-isolation.mjs'
           ]);
+          const outputD1Review=new Set([
+            'swarm/smoke-six-call-output-artifacts.review.sql',
+            'swarm/smoke-six-call-output-d1.mjs',
+            'swarm/smoke-six-call-output-d1.test.mjs',
+            'swarm/SMOKE_SIX_CALL_OUTPUT_D1_READINESS.md',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-free-only-planning-offline.yml',
+            'swarm/verify-isolation.mjs'
+          ]);
           const match=s=>changes.length===s.size&&
             new Set(changes).size===s.size&&changes.every(p=>s.has(p));
-          if(!match(allowed)&&!match(providerAdapterReview))
+          if(!match(allowed)&&!match(providerAdapterReview)&&!match(outputD1Review))
             throw Error('UNREVIEWED_CHANGE_SCOPE');
           console.log('OFFLINE_FREE_OR_PROVIDER_REVIEW_STRICT_SCOPE_PASS');
           NODE
