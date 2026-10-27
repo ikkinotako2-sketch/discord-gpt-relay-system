@@ -5,6 +5,7 @@ on:
       - 'swarm/smoke-free-only-planning.mjs'
       - 'swarm/smoke-free-only-planning.test.mjs'
       - 'swarm/SMOKE_FREE_ONLY_READINESS.md'
+      - 'swarm/verify-isolation.mjs'
       - '.github/workflows/swarm-free-only-planning-offline.yml'
 permissions:
   contents: read
@@ -19,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Reject changes outside the four reviewed offline files
+      - name: Reject changes outside the five reviewed offline files
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -31,12 +32,13 @@ jobs:
             'swarm/smoke-free-only-planning.mjs',
             'swarm/smoke-free-only-planning.test.mjs',
             'swarm/SMOKE_FREE_ONLY_READINESS.md',
+            'swarm/verify-isolation.mjs',
             '.github/workflows/swarm-free-only-planning-offline.yml'
           ]);
           const changes=readFileSync('/tmp/free-only-paths.txt','utf8').trim().split('\n');
-          if(changes.length!==4||changes.some(p=>!allowed.has(p))||
-             new Set(changes).size!==4)throw Error('UNREVIEWED_CHANGE_SCOPE');
-          console.log('OFFLINE_FREE_ONLY_FOUR_FILE_SCOPE_PASS');
+          if(changes.length!==5||changes.some(p=>!allowed.has(p))||
+             new Set(changes).size!==5)throw Error('UNREVIEWED_CHANGE_SCOPE');
+          console.log('OFFLINE_FREE_ONLY_FIVE_FILE_SCOPE_PASS');
           NODE
       - name: No production deployment, billing or AI inference
         run: |
