@@ -18,6 +18,12 @@ Before this change, the coordinator read STOP before making a durable D1 claim, 
 - A duplicate active/PENDING smoke attempt fails the UNIQUE index. A cap-exhaustion trigger aborts one claim and does not modify the local budget, controller counters or preserved original UNKNOWN.
 - Fault-injection tests cover postclaim STOP, D1 read outage after claim, stale/wrong version and clock, STOP while provider is in flight, two scheduler triggers, six then deny seventh, provider UNKNOWN, previous historical job unchanged.
 
+## GitHub Draft-chain completeness / TOCTOU safety hardening
+- Identified a stale GitHub readiness collector that verified Draft PRs only through **#28**, despite actual dependencies continuing through **#34**. Updated its mandatory pinned chain to cover PRs #21, #23-#34 in exact base/head order.
+- Optional, **non-authorizing** `extraDrafts` accepts reviewed *next* Draft numbers and branches and independently GET-verifies every exact link, avoiding implicit success when the chain grows. The fully verified last SHA must equal a caller-pinned SHA. Origin/fork mismatches, missing Draft PRs and changed bases are rejected.
+- Rechecks all five GitHub Actions active statuses **after** reading the complete PR chain. If Actions start during collection, a stale zero-run result must never be returned. This GET sweep does not fence Github or Cloudflare, and a resumed run after the check still requires a fresh live preflight.
+- Every output remains strictly `authorizesLiveActions:false`, `authorizesInference:false`; a mocked reviewed chain is not owner consent or provider quota.
+
 ## Not completed here
 Cloudflare remote D1 migrations/backup/restore, independent Watchdog actual rollback, consented owner OAuth+CSRF activation, account-global Dashboard/Wrangler/GitHub release exclusion, genuine current account-wide free Neuron margin/model availability and real six calls remain **UNVERIFIED / BLOCKED**. A local backup is not a production backup.
 
