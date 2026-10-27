@@ -30,10 +30,11 @@ const orig=db=>db.prepare(`SELECT * FROM swarm_jobs WHERE run_id='old_immutable_
 const migration=db=>{
  db.exec(script('smoke-six-call-d1-schema.review.sql'));
  db.exec(script('smoke-six-call-owner-prepare-index.review.sql'));
+ db.exec(script('smoke-six-call-output-artifacts.review.sql'));
 };
 function attest(db){
  const r=db.prepare(D1_SCHEMA_SELECT).all();
- assert.equal(r.length,6);
+ assert.equal(r.length,7);
  const actual=Object.fromEntries(r.map(x=>[
   x.name,createHash('sha256').update(x.sql).digest('hex')
  ]));
