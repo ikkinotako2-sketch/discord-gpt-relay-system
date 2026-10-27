@@ -29,12 +29,12 @@ function fixture({migrated=false}={}){
   assert.equal(opts.headers.Authorization,'Bearer test-read-only-token');
   const parsed=JSON.parse(opts.body);
   assert.deepEqual(Object.keys(parsed),['sql']);
-  assert.match(parsed.sql,/^SELECT /);
+  assert.match(parsed.sql,/^SELECT\\s/);
   assert.doesNotMatch(parsed.sql,/\b(INSERT|UPDATE|DELETE|DROP|ALTER|REPLACE|CREATE|PRAGMA|ATTACH)\b/i);
   queries.push(parsed.sql);
   let rows;
   try{rows=sqlite.prepare(parsed.sql).all();}
-  catch(err){console.log('OFFLINE_SQLITE_TEST_DIAGNOSTIC',String(err));return {status:400,ok:false,json:async()=>({success:false})};}
+  catch{return {status:400,ok:false,json:async()=>({success:false})};}
   return {status:200,ok:true,json:async()=>({
    success:true,result:[{success:true,results:rows}]
   })};
