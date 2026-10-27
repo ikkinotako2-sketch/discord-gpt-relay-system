@@ -38,7 +38,7 @@ function setup(){
    run:async()=>statement.run(...args)
   };}};}};
  const controller=createD1SixCallStore({db,runId});
- const outputs=createStagedD1SixCallOutputStore({db,runId,ownerId,clock:()=>now+3});
+ const outputs=createStagedD1SixCallOutputStore({db,runId,ownerId,clock:()=>now+12});
  const env={SWARM_DAILY_CALL_CAP:'6',SMOKE_AI_PROVIDER_ENABLED:'true',
   SMOKE_PINNED_MODEL:GPT_OSS_MODEL,SWARM_SMOKE_EXPIRES_AT:String(expiry),
   DISCORD_ALLOWED_USER_ID:ownerId,...Object.fromEntries(FLAGS.map(n=>[n,'true']))};
@@ -49,7 +49,7 @@ function setup(){
   return {response:'確認済み第'+modelCalls+'段階の出力'};
  }};
  const provider=createStagedSixCallAIProvider({
-  env,clock:()=>now+5,
+  env,clock:()=>now+11,
   loadVerifiedTask:async details=>({
    ...details,source:'SERVER_D1_VERIFIED_OWNER_TASK',
    ownerId,expiryMs:expiry,checkedAtMs:now,
