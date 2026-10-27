@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Reject changes outside the five reviewed offline files
+      - name: Reject changes outside two exact offline-only reviewed change sets
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -36,9 +36,19 @@ jobs:
             '.github/workflows/swarm-free-only-planning-offline.yml'
           ]);
           const changes=readFileSync('/tmp/free-only-paths.txt','utf8').trim().split('\n');
-          if(changes.length!==5||changes.some(p=>!allowed.has(p))||
-             new Set(changes).size!==5)throw Error('UNREVIEWED_CHANGE_SCOPE');
-          console.log('OFFLINE_FREE_ONLY_FIVE_FILE_SCOPE_PASS');
+          const providerAdapterReview=new Set([
+            'swarm/smoke-six-call-provider-adapter.mjs',
+            'swarm/smoke-six-call-provider-adapter.test.mjs',
+            'swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-free-only-planning-offline.yml',
+            'swarm/verify-isolation.mjs'
+          ]);
+          const match=s=>changes.length===s.size&&
+            new Set(changes).size===s.size&&changes.every(p=>s.has(p));
+          if(!match(allowed)&&!match(providerAdapterReview))
+            throw Error('UNREVIEWED_CHANGE_SCOPE');
+          console.log('OFFLINE_FREE_OR_PROVIDER_REVIEW_STRICT_SCOPE_PASS');
           NODE
       - name: No production deployment, billing or AI inference
         run: |

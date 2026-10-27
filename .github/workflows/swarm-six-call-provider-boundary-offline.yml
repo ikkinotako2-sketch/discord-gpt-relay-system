@@ -1,0 +1,55 @@
+name: Discord Six-Call Provider Boundary OFFLINE (NO DEPLOY)
+on:
+  pull_request:
+    paths:
+      - 'swarm/smoke-six-call-provider-adapter.mjs'
+      - 'swarm/smoke-six-call-provider-adapter.test.mjs'
+      - 'swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md'
+      - 'swarm/verify-isolation.mjs'
+      - '.github/workflows/swarm-free-only-planning-offline.yml'
+      - '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Exact six-file isolation
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/adapter-changes.txt
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const allowed=new Set([
+            'swarm/smoke-six-call-provider-adapter.mjs',
+            'swarm/smoke-six-call-provider-adapter.test.mjs',
+            'swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-free-only-planning-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
+          ]);
+          const files=readFileSync('/tmp/adapter-changes.txt','utf8').trim().split('\n');
+          if(files.length!==6||new Set(files).size!==6||files.some(p=>!allowed.has(p)))
+            throw Error('UNREVIEWED_PROVIDER_CHANGE_SCOPE');
+          console.log('PROVIDER_BOUNDARY_SIX_FILE_ISOLATION_PASS');
+          NODE
+      - name: Syntax + fake Workers AI and real SQLite controller integration
+        run: |
+          node --check swarm/smoke-six-call-provider-adapter.mjs
+          node --check swarm/smoke-six-call-provider-adapter.test.mjs
+          node --test swarm/smoke-six-call-provider-adapter.test.mjs \
+            swarm/smoke-six-call-controller.test.mjs \
+            swarm/smoke-six-call-postclaim-stop.test.mjs \
+            swarm/smoke-six-call-d1-store.test.mjs \
+            swarm/smoke-six-call-migration-acceptance.test.mjs
+      - name: Assert this module remains unused by production Worker
+        run: |
+          ! grep -R "smoke-six-call-provider-adapter" worker-relay.mjs worker-loop.mjs swarm/api.mjs swarm/cron.mjs swarm/runner.mjs
+          echo 'PROVIDER_BOUNDARY_OFFLINE_MOCK_AI_NO_LIVE_INFERENCE'
