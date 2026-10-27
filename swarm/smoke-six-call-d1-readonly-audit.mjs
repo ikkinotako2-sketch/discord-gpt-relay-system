@@ -71,6 +71,44 @@ export const D1_STATE_SELECT=`SELECT
   LEFT JOIN swarm_smoke_control_owner_tasks t ON t.run_id=r.run_id
   WHERE (r.phase IN ('ACTIVE','RESTORE_REQUIRED') OR r.attempts>0)
    AND t.run_id IS NULL) AS missing_owner_task_runs`;
+// One new owner task, at most six durable outputs. Text is read solely to
+// verify the stored digest, never returned, logged, or used as release proof.
+// LIMIT 7 detects a seventh row; larger/historical output sets fail closed.
+export const D1_OUTPUT_DIGEST_SELECT=`SELECT run_id,stage_index,owner_id,
+ task_receipt_id,claim_revision,digest_sha256,receipt_id,final_text,saved_at_ms
+ FROM swarm_smoke_control_outputs ORDER BY run_id,stage_index LIMIT 7`;
+const utf8=new TextEncoder();
+const DIGEST=/^[0-9a-f]{64}$/;
+const RUN_ID=/^[A-Za-z0-9_-]{8,100}$/;
+const OWNER_ID=/^[0-9]{15,22}$/;
+async function sha256(text){
+ const bytes=await crypto.subtle.digest('SHA-256',utf8.encode(text));
+ return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function verifyBoundedOutputs(select,expected){
+ if(expected===0)return true;
+ if(expected>6)return false;
+ const rows=await select(D1_OUTPUT_DIGEST_SELECT);
+ if(rows.length!==expected)return false;
+ const seen=new Set();
+ for(const r of rows){
+  if(!r||!RUN_ID.test(r.run_id||'')||
+     !Number.isSafeInteger(r.stage_index)||r.stage_index<0||r.stage_index>5||
+     !OWNER_ID.test(r.owner_id||'')||!RUN_ID.test(r.task_receipt_id||'')||
+     !Number.isSafeInteger(r.claim_revision)||r.claim_revision!==2*r.stage_index+1||
+     !DIGEST.test(r.digest_sha256||'')||
+     r.receipt_id!=='final_'+r.digest_sha256.slice(0,40)||
+     typeof r.final_text!=='string'||!r.final_text.trim()||
+     r.final_text.length>2200||utf8.encode(r.final_text).byteLength>2400||
+     !Number.isSafeInteger(r.saved_at_ms)||r.saved_at_ms<1e12)
+   return false;
+  const key=r.run_id+'|'+r.stage_index;
+  if(seen.has(key))return false;
+  seen.add(key);
+  if(await sha256(r.final_text)!==r.digest_sha256)return false;
+ }
+ return true;
+}
 const count=n=>Number.isSafeInteger(n)&&n>=0;
 const time=n=>Number.isSafeInteger(n)&&n>=1e12;
 const deny=reason=>Object.freeze({status:'BLOCKED',reason,authorizesLiveActions:false,
@@ -146,6 +184,12 @@ export async function collectSixCallD1ReadOnly({
       x.in_flight_runs!==x.claimed_unresolved||
       x.open_runs>x.runs||x.stopped_runs>x.runs)
     return deny('D1_CONTROL_COUNTERS_INCONSISTENT');
+   // Aggregate counts cannot establish that final_text actually hashes to
+   // digest_sha256. Re-read the bounded content and hash locally; no text
+   // is exposed in the returned attestation. Reads are non-atomic, so this
+   // still cannot authorize production inference or D1 writes.
+   if(!(await verifyBoundedOutputs(select,x.output_rows)))
+    return deny('D1_OUTPUT_CONTENT_DIGEST_OR_READBACK_UNVERIFIED');
    // Existing SQL object names alone do NOT attest the actual trigger bodies.
    // Even a perfectly empty/stable migration is still NOT live authorization.
    status=x.open_runs===0&&x.in_flight_runs===0&&x.new_unknown===0?
@@ -161,6 +205,6 @@ export async function collectSixCallD1ReadOnly({
    counts,sqlDefinitionsVerified:seen.size===D1_CONTROL_SCHEMA_NAMES.length,
    originalHistoricalUnknownVerified:false,
    cloudflareAccountWideNeuronsVerified:false,
-   note:'Pinned SQL definition hash + counts reviewed non-atomically. Not proof of a deployed recovery or authorization to migrate, deploy or infer.'});
+   note:'Pinned SQL definition hash, counts and bounded output content digests reviewed non-atomically. Not proof of a deployed recovery or authorization to migrate, deploy or infer.'});
  }catch{return deny('D1_READ_INCOMPLETE_OR_UNAVAILABLE');}
 }
