@@ -48,7 +48,8 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const providerBoundary=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-provider-boundary-20261027';
   const outputD1Review=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-output-d1-20261027';
   const ownerTaskSourceReview=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-owner-task-source-20261028';
-  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop&&!releaseFence&&!quotaReview&&!githubReadOnly&&!d1ReadOnly&&!workerGet&&!crossEvidence&&!ddlIntegrity&&!postClaimStop&&!reviewedFinalBundle&&!freeOnlyReview&&!providerBoundary&&!outputD1Review&&!ownerTaskSourceReview)
+  const elevenObjectAudit=base==='main'&&process.env.GITHUB_HEAD_REF==='feature/discord-six-call-eleven-object-d1-audit-20261028';
+  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop&&!releaseFence&&!quotaReview&&!githubReadOnly&&!d1ReadOnly&&!workerGet&&!crossEvidence&&!ddlIntegrity&&!postClaimStop&&!reviewedFinalBundle&&!freeOnlyReview&&!providerBoundary&&!outputD1Review&&!ownerTaskSourceReview&&!elevenObjectAudit)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -255,7 +256,20 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     '.github/workflows/swarm-six-call-owner-task-source-offline.yml',
     '.github/workflows/swarm-six-call-output-d1-offline.yml'
   ]);
-  const illegal=paths.filter(path=>ownerTaskSourceReview ? !ownerTaskSourceFiles.has(path) : outputD1Review ? !outputD1Files.has(path) : providerBoundary ? !providerBoundaryFiles.has(path) : freeOnlyReview ? !freeOnlyReviewFiles.has(path) : reviewedFinalBundle ? !reviewedBundleFiles.has(path) : postClaimStop ? !postClaimStopFiles.has(path) : ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
+  const elevenObjectAuditFiles=new Set([
+    'swarm/SMOKE_SIX_CALL_D1_DDL_INTEGRITY.md',
+    'swarm/smoke-six-call-cross-evidence.mjs',
+    'swarm/smoke-six-call-cross-evidence.test.mjs',
+    'swarm/smoke-six-call-d1-ddl-digest.mjs',
+    'swarm/smoke-six-call-d1-ddl-digest.test.mjs',
+    'swarm/smoke-six-call-d1-readonly-audit.mjs',
+    'swarm/smoke-six-call-d1-readonly-audit.test.mjs',
+    'swarm/smoke-six-call-migration-acceptance.test.mjs',
+    'swarm/verify-isolation.mjs',
+    '.github/workflows/swarm-six-call-output-d1-offline.yml',
+    '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+  ]);
+  const illegal=paths.filter(path=>elevenObjectAudit ? !elevenObjectAuditFiles.has(path) : ownerTaskSourceReview ? !ownerTaskSourceFiles.has(path) : outputD1Review ? !outputD1Files.has(path) : providerBoundary ? !providerBoundaryFiles.has(path) : freeOnlyReview ? !freeOnlyReviewFiles.has(path) : reviewedFinalBundle ? !reviewedBundleFiles.has(path) : postClaimStop ? !postClaimStopFiles.has(path) : ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));

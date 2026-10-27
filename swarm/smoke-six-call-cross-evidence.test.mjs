@@ -23,7 +23,7 @@ const worker=()=>({
 const d1=()=>({
  status:'MIGRATION_UNAPPLIED_CONFIRMED',
  source:'CLOUDFLARE_D1_SELECT_ONLY',checkedAtMs:now-13_000,
- schemaObjectCount:0,expectedObjectCount:6,readOnly:true,counts:null,
+ schemaObjectCount:0,expectedObjectCount:11,readOnly:true,counts:null,
  sqlDefinitionsVerified:false,originalHistoricalUnknownVerified:false,
  authorizesLiveActions:false,authorizesD1Writes:false,
  authorizesDeployment:false,authorizesInference:false
@@ -117,10 +117,10 @@ test('Worker wrong account/name/version/percentage/Watchdog parked blocks',()=>{
 test('D1 partially applied migration, present schema, or inconsistent evidence blocks',()=>{
  for(const patch of [
   {status:'PARTIAL_D1_CONTROL_MIGRATION_UNSAFE'},
-  {status:'MIGRATION_OBJECTS_PRESENT_REVIEW_REQUIRED',schemaObjectCount:6},
+  {status:'MIGRATION_OBJECTS_PRESENT_REVIEW_REQUIRED',schemaObjectCount:11},
   {schemaObjectCount:1},{counts:{runs:0}},
   {sqlDefinitionsVerified:true},{originalHistoricalUnknownVerified:true},
-  {readOnly:false},{expectedObjectCount:7}
+  {readOnly:false},{expectedObjectCount:10}
  ]){
   const args=defaults();args.d1={...args.d1,...patch};
   assert.equal(corroborateSixCallReadOnly(args).reason,

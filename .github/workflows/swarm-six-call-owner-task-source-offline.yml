@@ -37,8 +37,22 @@ jobs:
             '.github/workflows/swarm-six-call-owner-task-source-offline.yml',
             '.github/workflows/swarm-six-call-output-d1-offline.yml'
           ]);
+          const elevenObjectAudit=new Set([
+            'swarm/SMOKE_SIX_CALL_D1_DDL_INTEGRITY.md',
+            'swarm/smoke-six-call-cross-evidence.mjs',
+            'swarm/smoke-six-call-cross-evidence.test.mjs',
+            'swarm/smoke-six-call-d1-ddl-digest.mjs',
+            'swarm/smoke-six-call-d1-ddl-digest.test.mjs',
+            'swarm/smoke-six-call-d1-readonly-audit.mjs',
+            'swarm/smoke-six-call-d1-readonly-audit.test.mjs',
+            'swarm/smoke-six-call-migration-acceptance.test.mjs',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+          ]);
           const paths=readFileSync('/tmp/owner-task-changed.txt','utf8').trim().split('\n');
-          if(paths.length!==7||new Set(paths).size!==7||paths.some(x=>!allow.has(x)))
+          if(![allow,elevenObjectAudit].some(s=>paths.length===s.size&&
+             new Set(paths).size===s.size&&paths.every(x=>s.has(x))))
             throw Error('OWNER_TASK_CHANGE_SCOPE_NOT_REVIEWED');
           console.log('OWNER_TASK_EXACT_SEVEN_FILE_ISOLATION_PASS');
           NODE
