@@ -9,6 +9,7 @@ import {createD1SixCallStore} from './smoke-six-call-d1-store.mjs';
 import {runSixCallStep} from './smoke-six-call-controller.mjs';
 import {DISCORD_SMOKE_TARGET as T,FLAGS} from './smoke-restore-guard.mjs';
 import {GPT_OSS_MODEL} from '../loop-quality.mjs';
+import {HISTORICAL_UNKNOWN_FINGERPRINT as H} from './smoke-reviewed-unknown-safe-off.mjs';
 
 const now=Date.UTC(2026,9,28,2,0);
 const expires=now+19*60*1000;
@@ -17,7 +18,7 @@ const receipt='owner_receipt_20261028';
 const ownerId='123456789012345678';
 const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
 const smoke='28c379e8-e759-4b2f-8300-e7a4c8b39b83';
-function setup({unknownStatus='ORIGINAL_UNKNOWN_FINGERPRINT_VERIFIED'}={}){
+function setup({unknownError='MODEL_OUTCOME_UNKNOWN'}={}){
  const sql=new DatabaseSync(':memory:');
  sql.exec('PRAGMA foreign_keys=ON');
  for(const path of ['schema.sql','smoke-six-call-d1-schema.review.sql',
@@ -25,6 +26,14 @@ function setup({unknownStatus='ORIGINAL_UNKNOWN_FINGERPRINT_VERIFIED'}={}){
   'smoke-six-call-output-artifacts.review.sql',
   'smoke-six-call-owner-task-source.review.sql'])
   sql.exec(readFileSync(new URL('./'+path,import.meta.url),'utf8'));
+ sql.prepare(`INSERT INTO swarm_jobs
+ (run_id,owner_id,task,cycles,status,calls_used,revision,history_json,
+ checkpoint,stop_requested,active_slot,last_error,created_at,updated_at,expires_at)
+ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+ 'preserved_unknown_20261024',ownerId,'historical task',H.cycles,H.status,
+ H.calls_used,1,'[]','',H.stop_requested,H.active_slot,unknownError,
+ H.created_at,H.updated_at,H.updated_at+20*60*1000
+ );
  sql.prepare(`INSERT INTO swarm_smoke_control_runs
  (run_id,owner_id,task_receipt_id,account_id,worker_name,database_id,
  baseline_version,smoke_version,phase,created_at_ms,updated_at_ms,expires_at_ms)
@@ -35,21 +44,24 @@ function setup({unknownStatus='ORIGINAL_UNKNOWN_FINGERPRINT_VERIFIED'}={}){
  run_id,owner_id,task_receipt_id,original_task,created_at_ms)
  VALUES(?,?,?,?,?)`).run(runId,ownerId,receipt,'Discord管理システムの本番安全計画',now);
  sql.prepare("UPDATE swarm_smoke_control_runs SET phase='ACTIVE' WHERE run_id=?").run(runId);
- const db={prepare(q){const stmt=sql.prepare(q);return {
-  bind(...params){return {
-   first:async()=>stmt.get(...params)??null,
-   run:async()=>stmt.run(...params)
-  };}};}};
+ const db={prepare(q){
+  const stmt=sql.prepare(q);
+  return {
+   all:async()=>{
+    if(q.includes("FROM swarm_jobs WHERE status='unknown'"))historicalChecks++;
+    return {results:stmt.all()};
+   },
+   bind(...params){return {
+    first:async()=>stmt.get(...params)??null,
+    run:async()=>stmt.run(...params)
+   };}
+  };
+ }};
  const store=createD1SixCallStore({db,runId});
  const output=createStagedD1SixCallOutputStore({db,runId,ownerId,clock:()=>now+15});
  let historicalChecks=0,modelCalls=0;
- const historicalUnknownVerifier=async target=>{
-  historicalChecks++;
-  return {status:unknownStatus,accountId:target.accountId,
-   databaseId:target.databaseId,checkedAtMs:now+10};
- };
  const ownerReader=createStagedD1OwnerTaskReader({
-  db,runId,ownerId,historicalUnknownVerifier,clock:()=>now+11
+  db,runId,ownerId,clock:()=>now+11
  });
  const env={
   SMOKE_AI_PROVIDER_ENABLED:'true',SWARM_DAILY_CALL_CAP:'6',
@@ -102,7 +114,7 @@ test('real SQLite end-to-end original D1 owner task -> six fake AI -> six output
    assert.equal(result.completed,i+1);
   }
   assert.equal(f.modelCalls(),6);
-  assert.equal(f.unknownChecks(),6);
+  assert.equal(f.unknownChecks(),12);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM swarm_smoke_control_outputs').get().n,6);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM swarm_smoke_control_claims').get().n,6);
   assert.equal(f.sql.prepare('SELECT sum(reserved) n FROM swarm_budget_days').get().n,6);
@@ -112,8 +124,8 @@ test('real SQLite end-to-end original D1 owner task -> six fake AI -> six output
   assert.equal(f.modelCalls(),6);
  }finally{f.sql.close();}
 });
-test('historical UNKNOWN is independently required; fake approval never becomes verified task',async()=>{
- const f=setup({unknownStatus:'OWNER_APPROVED_ONLY'});
+test('historical UNKNOWN pinned D1 fingerprint is required; fake approval never becomes verified task',async()=>{
+ const f=setup({unknownError:'OWNER_APPROVED_ONLY'});
  try{
   const result=await runSixCallStep({store:f.store,
    liveEvidence:f.liveEvidence,provider:f.provider,clock:()=>now+13});
@@ -123,11 +135,30 @@ test('historical UNKNOWN is independently required; fake approval never becomes 
   assert.equal(f.sql.prepare('SELECT sum(reserved) n FROM swarm_budget_days').get().n,1);
  }finally{f.sql.close();}
 });
-test('missing external UNKNOWN-verifier fails construction, never reads task',()=>{
+test('missing original UNKNOWN D1 row blocks before any model call',async()=>{
  const f=setup();
  try{
-  assert.throws(()=>createStagedD1OwnerTaskReader({db:f.db,runId,ownerId}),
-   /TRUSTED_OWNER_TASK_DEPENDENCIES_MISSING/);
+  f.sql.prepare("DELETE FROM swarm_jobs WHERE status='unknown'").run();
+  const result=await runSixCallStep({store:f.store,
+   liveEvidence:f.liveEvidence,provider:f.provider,clock:()=>now+13});
+  assert.equal(result.status,'UNKNOWN_STOP');
+  assert.equal(f.modelCalls(),0);
+ }finally{f.sql.close();}
+});
+test('extra UNKNOWN row or modified pinned fingerprint is never accepted',async()=>{
+ const f=setup();
+ try{
+  f.sql.prepare(`INSERT INTO swarm_jobs
+  (run_id,owner_id,task,cycles,status,calls_used,revision,history_json,
+  checkpoint,stop_requested,active_slot,last_error,created_at,updated_at,expires_at)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+   'second_unknown',ownerId,'other',1,'unknown',0,0,'[]','',0,null,
+   'MODEL_OUTCOME_UNKNOWN',now-10000,now-9000,now+10000
+  );
+  const result=await runSixCallStep({store:f.store,
+   liveEvidence:f.liveEvidence,provider:f.provider,clock:()=>now+13});
+  assert.equal(result.status,'UNKNOWN_STOP');
+  assert.equal(f.modelCalls(),0);
  }finally{f.sql.close();}
 });
 test('STOP after claim before owner task lookup blocks the provider and consumes reserved attempt',async()=>{
