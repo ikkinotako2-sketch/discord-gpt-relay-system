@@ -5,6 +5,7 @@
 // A trusted external historical UNKNOWN verifier is REQUIRED rather than
 // treating a caller's "true" property as evidence.
 import {DISCORD_SMOKE_TARGET} from './smoke-restore-guard.mjs';
+import {HISTORICAL_UNKNOWN_FINGERPRINT} from './smoke-reviewed-unknown-safe-off.mjs';
 const ID=/^[A-Za-z0-9_-]{8,100}$/;
 const OWNER=/^[0-9]{15,22}$/;
 const MS=t=>Number.isSafeInteger(t)&&t>=1e12;
@@ -24,6 +25,21 @@ WHERE r.run_id=? AND r.task_receipt_id=? AND r.owner_id=?
  AND c.stage_index=?
 LIMIT 1
 `;
+// Read the actual historical D1 row, not a caller-asserted verification status.
+// Two rows maximum distinguish the preserved single UNKNOWN from extra UNKNOWNs.
+const HISTORICAL_UNKNOWN_SQL=`SELECT status,calls_used,cycles,stop_requested,
+ active_slot,last_error,created_at,updated_at,
+ LENGTH(history_json) AS history_length,LENGTH(checkpoint) AS checkpoint_length
+ FROM swarm_jobs WHERE status='unknown' ORDER BY created_at DESC LIMIT 2`;
+async function verifyPreservedUnknownInD1(db,now){
+ const evidence=await db.prepare(HISTORICAL_UNKNOWN_SQL).all();
+ const rows=evidence?.results;
+ if(!Array.isArray(rows)||rows.length!==1||!rows[0]||
+    !Object.entries(HISTORICAL_UNKNOWN_FINGERPRINT)
+     .every(([key,value])=>rows[0][key]===value)||
+    now<HISTORICAL_UNKNOWN_FINGERPRINT.updated_at)
+   throw Error('HISTORICAL_UNKNOWN_D1_FINGERPRINT_CHANGED_OR_MISSING');
+}
 const PREVIOUS=`
 SELECT o.final_text,o.digest_sha256,o.owner_id,o.task_receipt_id,
  o.claim_revision,o.receipt_id,c.state AS claim_state
@@ -45,18 +61,15 @@ function exactRequest(x,runId){
    Number.isSafeInteger(x.claimRevision)&&x.claimRevision>=1;
 }
 /**
- * Critical: historicalUnknownVerifier is an independent capability, not a
- * boolean supplied by the user, and must check the original row fingerprint
- * and current D1 remotely for each bounded smoke session.
- * Even a positive mock result DOES NOT grant deployment or AI authorization.
+ * Read the pinned original UNKNOWN directly from the same D1 binding as the
+ * owner task; a status string from any caller or external mock is not proof.
+ * Even a positive local D1 read DOES NOT authorize live deployment or AI.
  */
 export function createStagedD1OwnerTaskReader({
- db,runId,ownerId,historicalUnknownVerifier,clock=Date.now
+ db,runId,ownerId,clock=Date.now
 }={}){
  if(typeof db?.prepare!=='function'||!ID.test(runId||'')||
-    !OWNER.test(ownerId||'')||
-    typeof historicalUnknownVerifier!=='function'||
-    typeof clock!=='function')
+    !OWNER.test(ownerId||'')||typeof clock!=='function')
    throw Error('TRUSTED_OWNER_TASK_DEPENDENCIES_MISSING');
  return Object.freeze({
   async loadVerifiedTask(request){
@@ -83,18 +96,9 @@ export function createStagedD1OwnerTaskReader({
       typeof r.original_task!=='string'||!r.original_task.trim()||
       r.original_task.length>1000)
      throw Error('OWNER_TASK_D1_CLAIM_OR_STATE_UNVERIFIED');
-   // No unchecked caller "historicalUnknownPreserved:true" can pass.
-   const unknown=await historicalUnknownVerifier({
-     accountId:DISCORD_SMOKE_TARGET.accountId,
-     databaseId:DISCORD_SMOKE_TARGET.databaseId,
-     runId,atMs:now
-   });
-   if(unknown?.status!=='ORIGINAL_UNKNOWN_FINGERPRINT_VERIFIED'||
-      unknown.accountId!==DISCORD_SMOKE_TARGET.accountId||
-      unknown.databaseId!==DISCORD_SMOKE_TARGET.databaseId||
-      !MS(unknown.checkedAtMs)||unknown.checkedAtMs>now||
-      now-unknown.checkedAtMs>5*60*1000)
-     throw Error('HISTORICAL_UNKNOWN_NOT_INDEPENDENTLY_VERIFIED');
+   // Fail closed if the original historical UNKNOWN was removed, edited,
+   // duplicated or became unreadable. Never replay or mutate it.
+   await verifyPreservedUnknownInD1(db,now);
    let previous='';
    if(i>0){
     const p=await db.prepare(PREVIOUS).bind(runId,i-1).first();
@@ -117,8 +121,17 @@ export function createStagedD1OwnerTaskReader({
    if(!fresh||fresh.phase!=='ACTIVE'||fresh.stop_requested!==0||
       fresh.claim_state!=='CLAIMED'||fresh.revision!==request.claimRevision||
       fresh.in_flight_index!==i||fresh.attempts!==i+1||
-      fresh.completed!==i)
+      fresh.completed!==i||fresh.run_id!==r.run_id||
+      fresh.owner_id!==r.owner_id||fresh.task_receipt_id!==r.task_receipt_id||
+      fresh.account_id!==r.account_id||fresh.worker_name!==r.worker_name||
+      fresh.database_id!==r.database_id||
+      fresh.expires_at_ms!==r.expires_at_ms||
+      fresh.original_task!==r.original_task||
+      fresh.task_created_at_ms!==r.task_created_at_ms)
      throw Error('OWNER_STOP_OR_CLAIM_CHANGED_BEFORE_PROVIDER');
+   // The original UNKNOWN must also remain identical after all intermediate
+   // D1 reads. These are not atomic snapshots or a live-release grant.
+   await verifyPreservedUnknownInD1(db,now);
    return Object.freeze({
     ...request,source:'SERVER_D1_VERIFIED_OWNER_TASK',
     ownerId,expiryMs:r.expires_at_ms,checkedAtMs:now,
