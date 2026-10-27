@@ -5,6 +5,8 @@ on:
       - 'swarm/smoke-six-call-controller.mjs'
       - 'swarm/smoke-six-call-postclaim-stop.test.mjs'
       - 'swarm/smoke-six-call-migration-acceptance.test.mjs'
+      - 'swarm/smoke-six-call-github-readonly.mjs'
+      - 'swarm/smoke-six-call-github-readonly.test.mjs'
       - 'swarm/verify-isolation.mjs'
       - 'swarm/SMOKE_SIX_CALL_POSTCLAIM_STOP_REVIEW.md'
       - '.github/workflows/swarm-six-call-postclaim-stop-offline.yml'
@@ -21,13 +23,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Prove reviewed six-file isolation
+      - name: Prove reviewed eight-file isolation
         run: node swarm/verify-isolation.mjs
       - name: Syntax checks
         run: |
           node --check swarm/smoke-six-call-controller.mjs
           node --check swarm/smoke-six-call-postclaim-stop.test.mjs
           node --check swarm/smoke-six-call-migration-acceptance.test.mjs
+          node --check swarm/smoke-six-call-github-readonly.mjs
+          node --check swarm/smoke-six-call-github-readonly.test.mjs
       - name: Cross-layer full SQLite STOP, provider races, migration backup recovery
         run: |
           node --test swarm/smoke-six-call-postclaim-stop.test.mjs \
@@ -35,7 +39,8 @@ jobs:
             swarm/smoke-six-call-controller.test.mjs \
             swarm/smoke-six-call-d1-store.test.mjs \
             swarm/smoke-six-call-stop-reconcile.test.mjs \
-            swarm/smoke-six-call-d1-ddl-digest.test.mjs
+            swarm/smoke-six-call-d1-ddl-digest.test.mjs \
+            swarm/smoke-six-call-github-readonly.test.mjs
       - name: Ensure zero production imports or Cloudflare credentials
         run: |
           ! grep -R -E "smoke-six-call-postclaim-stop|smoke-six-call-migration-acceptance" worker-loop.mjs command-center/server.mjs swarm/api.mjs swarm/runner.mjs swarm/cron.mjs
