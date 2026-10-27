@@ -95,6 +95,51 @@ test('new active smoke reservation detected without exposing owner/job payload',
   assert.equal(JSON.stringify(result).includes(RUN),false);
  }finally{f.sqlite.close();}
 });
+test('output artifact provenance rejects forged receipt, revision and out-of-window save time',async()=>{
+ const variants=[
+  {name:'correct in-flight artifact',patch:{},expected:'CONTROL_JOBS_REQUIRE_MANUAL_REVIEW'},
+  {name:'different owner task receipt',patch:{task_receipt_id:'receipt_other_20261027'},expected:'BLOCKED'},
+  {name:'forged claim revision',patch:{claim_revision:77},expected:'BLOCKED'},
+  {name:'saved before claim',patch:{saved_at_ms:now+9},expected:'BLOCKED'},
+  {name:'saved at expiry',patch:{saved_at_ms:now+19*60*1000},expected:'BLOCKED'}
+ ];
+ for(const v of variants){
+  const f=fixture({migrated:true});
+  try{
+   const receipt='receipt_claim_20261027';
+   f.sqlite.prepare(`INSERT INTO swarm_smoke_control_runs
+    (run_id,owner_id,task_receipt_id,account_id,worker_name,database_id,
+     baseline_version,smoke_version,phase,created_at_ms,updated_at_ms,expires_at_ms)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+     RUN,owner,receipt,T.accountId,T.worker,T.databaseId,
+     V1,V2,'PENDING',now,now,now+19*60*1000);
+   f.sqlite.prepare(`INSERT INTO swarm_smoke_control_owner_tasks
+    (run_id,owner_id,task_receipt_id,original_task,created_at_ms)
+    VALUES(?,?,?,?,?)`).run(RUN,owner,receipt,'original task',now);
+   f.sqlite.prepare("UPDATE swarm_smoke_control_runs SET phase='ACTIVE' WHERE run_id=?").run(RUN);
+   f.sqlite.prepare(`INSERT INTO swarm_smoke_control_claims
+    (run_id,stage_index,owner_id,utc_day,claimed_at_ms)
+    VALUES(?,?,?,?,?)`).run(RUN,0,owner,'2026-10-27',now+10);
+   const digest='a'.repeat(64);
+   const data={run_id:RUN,stage_index:0,owner_id:owner,
+    task_receipt_id:receipt,claim_revision:1,digest_sha256:digest,
+    receipt_id:'final_'+digest.slice(0,40),final_text:'fixture',saved_at_ms:now+11,
+    ...v.patch};
+   f.sqlite.prepare(`INSERT INTO swarm_smoke_control_outputs
+    (run_id,stage_index,owner_id,task_receipt_id,claim_revision,
+     digest_sha256,receipt_id,final_text,saved_at_ms)
+    VALUES(?,?,?,?,?,?,?,?,?)`).run(
+     data.run_id,data.stage_index,data.owner_id,data.task_receipt_id,
+     data.claim_revision,data.digest_sha256,data.receipt_id,
+     data.final_text,data.saved_at_ms);
+   const result=await collectSixCallD1ReadOnly(options(f));
+   assert.equal(result.status,v.expected,v.name+': '+JSON.stringify(result));
+   if(v.expected==='BLOCKED')
+    assert.equal(result.reason,'D1_CONTROL_COUNTERS_INCONSISTENT',v.name);
+   assert.equal(result.authorizesInference,false);
+  }finally{f.sqlite.close();}
+ }
+});
 test('partial index or trigger migration must BLOCK and not query missing tables',async()=>{
  const f=fixture({migrated:true});try{
   f.sqlite.exec('DROP INDEX swarm_smoke_control_one_pending_or_open');
