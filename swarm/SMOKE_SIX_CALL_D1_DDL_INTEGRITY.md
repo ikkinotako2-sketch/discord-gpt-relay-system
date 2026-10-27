@@ -14,3 +14,9 @@ The prior GET/SELECT metadata auditor verifies 6 SQLite objects only by *name/ty
 Migration remains unapplied to production until an independent backup, rollback and explicit owner approval. Independently attested D1 schema integrity does **not** authorize any model inference or cleanup of the immutable historical UNKNOWN. Need current account-wide Free Neuron allowance/model permission, genuine owner OAuth+CSRF, live Watchdog prearm+restore and cross-operator deployment serialization.
 
 **Status: OFFLINE STAGING. Real six-call test = 0/6; production BLOCKED.**
+
+## 2026-10-28: output receipts migration gap (offline review)
+
+The staged provider/output adapter added `swarm_smoke_control_outputs` after the original six-object audit was written. The earlier reader could report the six control objects as complete without checking whether this seventh output table existed. The revised read-only collector now pins **seven** SQLite DDL definitions, including the output table SHA-256 from local SQLite, and treats the old six-only installation as a **partial migration, BLOCKED**. It also compares aggregate verified claim counts with output receipts and rejects orphan/UNKNOWN-linked, owner-mismatched or malformed receipt-ID rows. It never reads or emits final text, and does not validate the final-text SHA-256 contents remotely.
+
+All checks remain GET/fixed-SELECT-only and offline-tested. A matching seven-object schema is **not** a live migration approval, proof of a current backup, proof of quota, or permission to invoke AI. Production remains safe-OFF; original historical UNKNOWN must remain untouched.
