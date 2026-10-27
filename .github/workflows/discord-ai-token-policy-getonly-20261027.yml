@@ -1,0 +1,76 @@
+name: Discord Free Workers AI Token Permission Details GET 20261027
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261027-once]
+    paths:
+      - '.github/workflows/discord-ai-token-policy-getonly-20261027.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-ai-token-permission-details-get-20261027
+  cancel-in-progress: false
+jobs:
+  token_policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9f2971c704cb792c36cea8854eb0c83dc21b1e15
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify token and inspect permission names only (GET requests)
+        run: |
+          node --input-type=module <<'NODE'
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(new Date().toISOString().slice(0,10)!=='2026-10-27')
+            throw Error('READ_ONLY_DATE_GUARD_FAILED');
+          if(!token){
+            console.log('PERMISSION_READ_STATUS=TOKEN_NOT_PRESENT');
+            console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+            process.exit(0);
+          }
+          async function safeGet(path){
+            try{
+              const response=await fetch('https://api.cloudflare.com/client/v4/'+path,{
+                method:'GET',headers:{Authorization:'Bearer '+token,Accept:'application/json'},
+                signal:AbortSignal.timeout(12000)
+              });
+              let body;
+              try{body=await response.json()}catch{body=null;}
+              return {status:response.status,success:body?.success===true,result:body?.result};
+            }catch{return {status:'NETWORK_UNVERIFIED',success:false,result:null};}
+          }
+          const verified=await safeGet('user/tokens/verify');
+          console.log('TOKEN_VERIFY_HTTP='+verified.status);
+          const active=verified.success&&verified.result?.status==='active';
+          console.log('TOKEN_ACTIVE='+active);
+          if(!active||!/^[a-f0-9]{32}$/i.test(verified.result?.id||'')){
+            console.log('TOKEN_POLICY_READ=UNVERIFIED');
+            console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+            process.exit(0);
+          }
+          const detail=await safeGet('user/tokens/'+verified.result.id);
+          console.log('TOKEN_DETAIL_HTTP='+detail.status);
+          if(!detail.success||!Array.isArray(detail.result?.policies)){
+            console.log('TOKEN_POLICY_READ=UNVERIFIED');
+          }else{
+            // Print ONLY whether allowed Workers AI Read/Write permission
+            // group names are present; never print policy resources, names,
+            // token ID, secret token, email, account list or raw error body.
+            const policies=detail.result.policies.filter(p=>p?.effect==='allow');
+            const groups=policies.flatMap(p=>Array.isArray(p?.permission_groups)?
+              p.permission_groups:[]).map(g=>g?.name).filter(x=>typeof x==='string');
+            console.log('TOKEN_POLICY_READ=READABLE');
+            console.log('WORKERS_AI_READ_POLICY_PRESENT='+groups.includes('Workers AI Read'));
+            console.log('WORKERS_AI_WRITE_POLICY_PRESENT='+groups.includes('Workers AI Write'));
+            console.log('RESOURCE_SCOPE_AND_MODEL_ENTITLEMENT=UNVERIFIED');
+          }
+          console.log('ACCOUNT_WIDE_FREE_NEURONS=UNVERIFIED');
+          console.log('AI_RUN_REQUESTS=0');
+          console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+          NODE
