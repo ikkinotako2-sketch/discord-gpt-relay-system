@@ -43,7 +43,7 @@ jobs:
           "swarm/verify-isolation.mjs",
           ".github/workflows/swarm-six-call-owner-task-source-offline.yml",
           ".github/workflows/swarm-six-call-output-d1-offline.yml"
-]);
+          ]);
           const paths=readFileSync('/tmp/owner-task-changed.txt','utf8').trim().split('\n');
           if(![allow,fingerprintFix].some(s=>paths.length===s.size&&
              new Set(paths).size===s.size&&paths.every(x=>s.has(x))))
