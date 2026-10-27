@@ -1,0 +1,76 @@
+name: Discord Free AI Binding Configuration GET-only 20261027
+on:
+  push:
+    branches: [audit/discord-d1-watchdog-readonly-20261027-once]
+    paths:
+      - '.github/workflows/discord-free-ai-binding-getonly-20261027.yml'
+permissions: {contents: read}
+concurrency:
+  group: discord-free-ai-binding-readonly-20261027
+  cancel-in-progress: false
+jobs:
+  binding_read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 341884e8628cf4ce8749271b63a9cece4572e93a
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Verify AI binding in actual Discord baseline with only Cloudflare GET
+        run: |
+          node --input-type=module <<'NODE'
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          if(new Date().toISOString().slice(0,10)!=='2026-10-27')
+            throw Error('UTC_DAY_NOT_PINNED');
+          if(!token){console.log('BINDINGS=UNVERIFIED_NO_TOKEN');process.exit(0);}
+          const worker='steep-glitter-b5cddiscord-ai-relay-lab';
+          const account='6c8ccd6aface937ab5dabef61cb64534';
+          const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          const root='https://api.cloudflare.com/client/v4/accounts/'+account+
+            '/workers/scripts/'+worker;
+          async function get(path){
+            try{
+              const r=await fetch(root+path,{
+                method:'GET',headers:{Authorization:'Bearer '+token,Accept:'application/json'},
+                signal:AbortSignal.timeout(12000)
+              });
+              if(r.status!==200)return {http:r.status,verified:false,result:null};
+              const data=await r.json();
+              return {http:r.status,verified:data?.success===true,result:data?.result};
+            }catch{return {http:'NETWORK_UNVERIFIED',verified:false,result:null};}
+          }
+          const dep=await get('/deployments');
+          const d=dep.result?.deployments?.[0];
+          const stable=dep.verified&&d?.versions?.length===1&&
+            d.versions[0]?.percentage===100&&
+            d.versions[0]?.version_id===baseline;
+          console.log('DEPLOYMENT_BASELINE_100='+stable);
+          if(!stable){
+            console.log('AI_BINDING=UNVERIFIED');
+            process.exit(0);
+          }
+          const settings=await get('/settings');
+          const version=await get('/versions/'+baseline);
+          const aiPresence=xs=>Array.isArray(xs)&&xs.filter(x=>x?.name==='AI').length===1&&
+            xs.some(x=>x?.name==='AI'&&x.type==='ai');
+          const cur=aiPresence(settings.result?.bindings);
+          const pinned=aiPresence(version.result?.resources?.bindings);
+          console.log('CURRENT_SETTINGS_HTTP='+settings.http);
+          console.log('PINNED_VERSION_HTTP='+version.http);
+          console.log('AI_BINDING_PRESENT_IN_SETTINGS='+
+            (settings.verified?cur:'UNVERIFIED'));
+          console.log('AI_BINDING_PRESENT_IN_PINNED_VERSION='+
+            (version.verified?pinned:'UNVERIFIED'));
+          console.log('DISCORD_WORKER_AI_BINDING_STATUS='+
+            (settings.verified&&version.verified&&cur&&pinned?
+              'CONFIGURED_NO_INFERENCE_TEST':'BLOCKED_OR_UNVERIFIED'));
+          console.log('MODEL_ENTITLEMENT=UNVERIFIED');
+          console.log('ACCOUNT_AI_FREE_NEURONS=UNVERIFIED');
+          console.log('AI_RUN_REQUESTS=0');
+          console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+          NODE
