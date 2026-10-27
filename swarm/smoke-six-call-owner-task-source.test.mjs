@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {createStagedD1OwnerTaskReader} from './smoke-six-call-owner-task-source.mjs';
 import {createStagedD1SixCallOutputStore} from './smoke-six-call-output-d1.mjs';
 import {createStagedSixCallAIProvider} from './smoke-six-call-provider-adapter.mjs';
@@ -18,6 +19,24 @@ const receipt='owner_receipt_20261028';
 const ownerId='123456789012345678';
 const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
 const smoke='28c379e8-e759-4b2f-8300-e7a4c8b39b83';
+const UNKNOWN_COLUMNS=[
+ 'run_id','owner_id','task','cycles','status','calls_used','revision',
+ 'history_json','checkpoint','stop_requested','active_slot','lease_owner',
+ 'lease_expires_at','last_error','created_at','updated_at','expires_at'
+];
+function independentlyPinOriginalFixture(sql){
+ const row=sql.prepare(`SELECT ${UNKNOWN_COLUMNS.join(',')} FROM swarm_jobs
+  WHERE status='unknown'`).get();
+ // TEST-ONLY: a separately captured original fixture, pinned BEFORE mutations.
+ // No such original full-row pin is yet available for production Cloudflare D1.
+ return Object.freeze({
+  runId:row.run_id,ownerId:row.owner_id,
+  digestSha256:createHash('sha256')
+   .update(JSON.stringify(UNKNOWN_COLUMNS.map(key=>row[key])),'utf8')
+   .digest('hex')
+ });
+}
+
 function setup({unknownError='MODEL_OUTCOME_UNKNOWN'}={}){
  const sql=new DatabaseSync(':memory:');
  sql.exec('PRAGMA foreign_keys=ON');
@@ -31,9 +50,12 @@ function setup({unknownError='MODEL_OUTCOME_UNKNOWN'}={}){
  checkpoint,stop_requested,active_slot,last_error,created_at,updated_at,expires_at)
  VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
  'preserved_unknown_20261024',ownerId,'historical task',H.cycles,H.status,
- H.calls_used,1,'[]','',H.stop_requested,H.active_slot,unknownError,
+ H.calls_used,1,'[]','',H.stop_requested,H.active_slot,H.last_error,
  H.created_at,H.updated_at,H.updated_at+20*60*1000
  );
+ const independentlyPinnedUnknown=independentlyPinOriginalFixture(sql);
+ if(unknownError!==H.last_error)
+  sql.prepare("UPDATE swarm_jobs SET last_error=? WHERE status='unknown'").run(unknownError);
  sql.prepare(`INSERT INTO swarm_smoke_control_runs
  (run_id,owner_id,task_receipt_id,account_id,worker_name,database_id,
  baseline_version,smoke_version,phase,created_at_ms,updated_at_ms,expires_at_ms)
@@ -61,7 +83,7 @@ function setup({unknownError='MODEL_OUTCOME_UNKNOWN'}={}){
  const output=createStagedD1SixCallOutputStore({db,runId,ownerId,clock:()=>now+15});
  let historicalChecks=0,modelCalls=0;
  const ownerReader=createStagedD1OwnerTaskReader({
-  db,runId,ownerId,clock:()=>now+11
+  db,runId,ownerId,independentlyPinnedUnknown,clock:()=>now+11
  });
  const env={
   SMOKE_AI_PROVIDER_ENABLED:'true',SWARM_DAILY_CALL_CAP:'6',
@@ -86,6 +108,7 @@ function setup({unknownError='MODEL_OUTCOME_UNKNOWN'}={}){
   githubActiveReleaseRuns:0,emergencyStopReachable:true
  })};
  return {sql,db,store,output,ownerReader,liveEvidence,provider,env,
+  independentlyPinnedUnknown,
   unknownChecks:()=>historicalChecks,modelCalls:()=>modelCalls};
 }
 test('the future owner task is inserted only while same owner PENDING, then immutable',()=>{
@@ -160,6 +183,46 @@ test('extra UNKNOWN row or modified pinned fingerprint is never accepted',async(
   assert.equal(result.status,'UNKNOWN_STOP');
   assert.equal(f.modelCalls(),0);
  }finally{f.sql.close();}
+});
+test('independent original full-row pin is mandatory and a forged digest is rejected',async()=>{
+ const f=setup();
+ try{
+  assert.throws(()=>createStagedD1OwnerTaskReader({
+   db:f.db,runId,ownerId,clock:()=>now+11
+  }),/TRUSTED_OWNER_TASK_DEPENDENCIES_MISSING/);
+  const bad=createStagedD1OwnerTaskReader({
+   db:f.db,runId,ownerId,
+   independentlyPinnedUnknown:{...f.independentlyPinnedUnknown,digestSha256:'0'.repeat(64)},
+   clock:()=>now+11
+  });
+  const result=await runSixCallStep({store:f.store,liveEvidence:f.liveEvidence,
+   provider:createStagedSixCallAIProvider({
+    env:f.env,loadVerifiedTask:bad.loadVerifiedTask,
+    persistVerifiedOutput:f.output.persistVerifiedOutput,clock:()=>now+12
+   }),clock:()=>now+13});
+  assert.equal(result.status,'UNKNOWN_STOP');
+  assert.equal(f.modelCalls(),0);
+ }finally{f.sql.close();}
+});
+test('same-length historical history, task, and run-id substitutions are all blocked',async t=>{
+ const variants=[
+  ["history_json='{}'",'same-length history'],
+  ["task='historical tAsk'",'same-length task'],
+  ["run_id='preserved_unknown_20261025'",'same-length run ID']
+ ];
+ for(const [mutation,label] of variants){
+  await t.test(label,async()=>{
+   const f=setup();
+   try{
+    f.sql.prepare(`UPDATE swarm_jobs SET ${mutation} WHERE status='unknown'`).run();
+    const result=await runSixCallStep({store:f.store,
+     liveEvidence:f.liveEvidence,provider:f.provider,clock:()=>now+13});
+    assert.equal(result.status,'UNKNOWN_STOP');
+    assert.equal(f.modelCalls(),0);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM swarm_smoke_control_outputs').get().n,0);
+   }finally{f.sql.close();}
+  });
+ }
 });
 test('STOP after claim before owner task lookup blocks the provider and consumes reserved attempt',async()=>{
  const f=setup();
