@@ -94,6 +94,14 @@ export function createStagedD1OwnerTaskReader({
     !OWNER.test(ownerId||'')||!validIndependentPin(independentlyPinnedUnknown)||
     typeof clock!=='function')
    throw Error('TRUSTED_OWNER_TASK_DEPENDENCIES_MISSING');
+ // Capture an immutable value snapshot at construction. The original caller
+ // may still own and mutate its pin object; that must never change the
+ // trusted historical fingerprint used during later asynchronous D1 reads.
+ const originalUnknownPin=Object.freeze({
+  runId:independentlyPinnedUnknown.runId,
+  ownerId:independentlyPinnedUnknown.ownerId,
+  digestSha256:independentlyPinnedUnknown.digestSha256
+ });
  return Object.freeze({
   async loadVerifiedTask(request){
    if(!exactRequest(request,runId))
@@ -121,7 +129,7 @@ export function createStagedD1OwnerTaskReader({
      throw Error('OWNER_TASK_D1_CLAIM_OR_STATE_UNVERIFIED');
    // Fail closed if the original historical UNKNOWN was removed, edited,
    // duplicated or became unreadable. Never replay or mutate it.
-   await verifyPreservedUnknownInD1(db,now,independentlyPinnedUnknown);
+   await verifyPreservedUnknownInD1(db,now,originalUnknownPin);
    let previous='';
    if(i>0){
     const p=await db.prepare(PREVIOUS).bind(runId,i-1).first();
@@ -154,7 +162,7 @@ export function createStagedD1OwnerTaskReader({
      throw Error('OWNER_STOP_OR_CLAIM_CHANGED_BEFORE_PROVIDER');
    // The original UNKNOWN must also remain identical after all intermediate
    // D1 reads. These are not atomic snapshots or a live-release grant.
-   await verifyPreservedUnknownInD1(db,now,independentlyPinnedUnknown);
+   await verifyPreservedUnknownInD1(db,now,originalUnknownPin);
    return Object.freeze({
     ...request,source:'SERVER_D1_VERIFIED_OWNER_TASK',
     ownerId,expiryMs:r.expires_at_ms,checkedAtMs:now,
