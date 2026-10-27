@@ -11,14 +11,21 @@ const REQUIRED=Object.freeze({
  swarm_smoke_control_one_pending_or_open:'index',
  swarm_smoke_control_claim_atomic:'trigger',
  swarm_smoke_control_settle_atomic:'trigger',
- swarm_smoke_control_outputs:'table'
+ swarm_smoke_control_outputs:'table',
+ swarm_smoke_control_owner_tasks:'table',
+ swarm_smoke_control_owner_task_scope:'trigger',
+ swarm_smoke_control_owner_task_no_update:'trigger',
+ swarm_smoke_control_owner_task_no_delete:'trigger'
 });
 export const D1_CONTROL_SCHEMA_NAMES=Object.freeze(Object.keys(REQUIRED));
 export const D1_SCHEMA_SELECT=`SELECT name,type,sql FROM sqlite_master
  WHERE name IN ('swarm_smoke_control_runs','swarm_smoke_control_claims',
  'swarm_smoke_control_one_open','swarm_smoke_control_one_pending_or_open',
  'swarm_smoke_control_claim_atomic','swarm_smoke_control_settle_atomic',
- 'swarm_smoke_control_outputs')
+ 'swarm_smoke_control_outputs','swarm_smoke_control_owner_tasks',
+ 'swarm_smoke_control_owner_task_scope',
+ 'swarm_smoke_control_owner_task_no_update',
+ 'swarm_smoke_control_owner_task_no_delete')
  ORDER BY name`;
 export const D1_STATE_SELECT=`SELECT
  (SELECT COUNT(*) FROM swarm_smoke_control_runs) AS runs,
@@ -47,7 +54,18 @@ export const D1_STATE_SELECT=`SELECT
    ON c.run_id=o.run_id AND c.stage_index=o.stage_index
   WHERE c.run_id IS NULL OR c.state='UNKNOWN'
    OR o.owner_id<>c.owner_id
-   OR o.receipt_id<>('final_'||substr(o.digest_sha256,1,40))) AS invalid_output_rows`;
+   OR o.receipt_id<>('final_'||substr(o.digest_sha256,1,40))) AS invalid_output_rows,
+ (SELECT COUNT(*) FROM swarm_smoke_control_owner_tasks) AS owner_task_rows,
+ (SELECT COUNT(*) FROM swarm_smoke_control_owner_tasks t
+  LEFT JOIN swarm_smoke_control_runs r ON r.run_id=t.run_id
+  WHERE r.run_id IS NULL OR r.owner_id<>t.owner_id
+   OR r.task_receipt_id<>t.task_receipt_id
+   OR t.created_at_ms<r.created_at_ms
+   OR t.created_at_ms>=r.expires_at_ms) AS invalid_owner_task_rows,
+ (SELECT COUNT(*) FROM swarm_smoke_control_runs r
+  LEFT JOIN swarm_smoke_control_owner_tasks t ON t.run_id=r.run_id
+  WHERE (r.phase IN ('ACTIVE','RESTORE_REQUIRED') OR r.attempts>0)
+   AND t.run_id IS NULL) AS missing_owner_task_runs`;
 const count=n=>Number.isSafeInteger(n)&&n>=0;
 const time=n=>Number.isSafeInteger(n)&&n>=1e12;
 const deny=reason=>Object.freeze({status:'BLOCKED',reason,authorizesLiveActions:false,
@@ -106,7 +124,8 @@ export async function collectSixCallD1ReadOnly({
    const x=rows[0],keys=[
     'runs','reserved_attempts','verified_finals','open_runs','stopped_runs',
     'in_flight_runs','claim_rows','claimed_unresolved','new_unknown','final_receipts',
-    'output_rows','final_output_rows','invalid_output_rows'
+    'output_rows','final_output_rows','invalid_output_rows',
+    'owner_task_rows','invalid_owner_task_rows','missing_owner_task_runs'
    ];
    if(!keys.every(k=>count(x[k]))||x.reserved_attempts<x.verified_finals||
       x.reserved_attempts>6*x.runs||x.verified_finals>6*x.runs||
@@ -117,6 +136,8 @@ export async function collectSixCallD1ReadOnly({
       x.output_rows<x.final_output_rows||
       x.output_rows>x.final_output_rows+x.claimed_unresolved||
       x.output_rows>x.claim_rows||x.invalid_output_rows!==0||
+      x.owner_task_rows>x.runs||x.invalid_owner_task_rows!==0||
+      x.missing_owner_task_runs!==0||
       x.in_flight_runs!==x.claimed_unresolved||
       x.open_runs>x.runs||x.stopped_runs>x.runs)
     return deny('D1_CONTROL_COUNTERS_INCONSISTENT');
