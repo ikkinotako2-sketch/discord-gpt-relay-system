@@ -75,8 +75,18 @@ jobs:
             "swarm/smoke-six-call-provider-adapter.test.mjs",
             "swarm/verify-isolation.mjs",
           ]);
+          const reviewedOwnerTaskRegistration=new Set([
+            'swarm/smoke-six-call-owner-task-register.mjs',
+            'swarm/smoke-six-call-owner-task-register.test.mjs',
+            'swarm/SMOKE_OWNER_TASK_REGISTER_REVIEW.md',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-owner-task-register-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+          ]);
           const files=readFileSync('/tmp/adapter-changes.txt','utf8').trim().split('\n');
-          if(![allowed,outputD1Review,asyncClockReview,combinedUnknownD1AndProviderClockReview].some(s=>files.length===s.size&&new Set(files).size===s.size&&files.every(p=>s.has(p))))
+          if(![allowed,outputD1Review,asyncClockReview,combinedUnknownD1AndProviderClockReview,reviewedOwnerTaskRegistration].some(s=>files.length===s.size&&new Set(files).size===s.size&&files.every(p=>s.has(p))))
             throw Error('UNREVIEWED_PROVIDER_CHANGE_SCOPE');
           console.log('PROVIDER_BOUNDARY_OUTPUT_D1_OR_ASYNC_CLOCK_EXACT_ISOLATION_PASS');
           NODE
