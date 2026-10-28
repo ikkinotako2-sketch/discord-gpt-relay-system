@@ -86,8 +86,18 @@ jobs:
             "swarm/smoke-six-call-provider-adapter.test.mjs",
             "swarm/verify-isolation.mjs",
           ]);
+          const reviewedOwnerTaskRegistration=new Set([
+            'swarm/smoke-six-call-owner-task-register.mjs',
+            'swarm/smoke-six-call-owner-task-register.test.mjs',
+            'swarm/SMOKE_OWNER_TASK_REGISTER_REVIEW.md',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-owner-task-register-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+          ]);
           const paths=readFileSync('/tmp/owner-task-changed.txt','utf8').trim().split('\n');
-          if(![allow,elevenObjectAudit,combinedUnknownAndElevenD1Review,combinedUnknownD1AndProviderClockReview].some(s=>paths.length===s.size&&
+          if(![allow,elevenObjectAudit,combinedUnknownAndElevenD1Review,combinedUnknownD1AndProviderClockReview,reviewedOwnerTaskRegistration].some(s=>paths.length===s.size&&
              new Set(paths).size===s.size&&paths.every(x=>s.has(x))))
             throw Error('OWNER_TASK_CHANGE_SCOPE_NOT_REVIEWED');
           console.log('OWNER_TASK_EXACT_REVIEWED_SCOPE_PASS');
