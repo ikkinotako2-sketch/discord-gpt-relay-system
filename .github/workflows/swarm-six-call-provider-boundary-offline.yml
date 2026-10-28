@@ -75,6 +75,17 @@ jobs:
             "swarm/smoke-six-call-provider-adapter.test.mjs",
             "swarm/verify-isolation.mjs",
           ]);
+          const ownerPrepareAsyncReview=new Set([
+            'swarm/smoke-six-call-owner-prepare.mjs',
+            'swarm/smoke-six-call-owner-prepare.test.mjs',
+            'swarm/SMOKE_SIX_CALL_OWNER_PREPARE_STATUS.md',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-owner-task-register-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+          ]);
+          const ownerPrepareAsyncBranch=process.env.GITHUB_HEAD_REF==='fix/offline-owner-prepare-async-review-20261028';
           const postClaimRowDriftReview=new Set([
             'swarm/SMOKE_SIX_CALL_CONTROLLER_STATUS.md',
             'swarm/smoke-six-call-controller.mjs',
@@ -99,7 +110,7 @@ jobs:
             '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
           ]);
           const files=readFileSync('/tmp/adapter-changes.txt','utf8').trim().split('\n');
-          if(![allowed,outputD1Review,asyncClockReview,combinedUnknownD1AndProviderClockReview,...(reviewedOwnerTaskBranch?[reviewedOwnerTaskRegistration]:[]),...(postClaimRowDriftBranch?[postClaimRowDriftReview]:[])].some(s=>files.length===s.size&&new Set(files).size===s.size&&files.every(p=>s.has(p))))
+          if(![allowed,outputD1Review,asyncClockReview,combinedUnknownD1AndProviderClockReview,...(reviewedOwnerTaskBranch?[reviewedOwnerTaskRegistration]:[]),...(postClaimRowDriftBranch?[postClaimRowDriftReview]:[]),...(ownerPrepareAsyncBranch?[ownerPrepareAsyncReview]:[])].some(s=>files.length===s.size&&new Set(files).size===s.size&&files.every(p=>s.has(p))))
             throw Error('UNREVIEWED_PROVIDER_CHANGE_SCOPE');
           console.log('PROVIDER_BOUNDARY_OUTPUT_D1_OR_ASYNC_CLOCK_EXACT_ISOLATION_PASS');
           NODE
