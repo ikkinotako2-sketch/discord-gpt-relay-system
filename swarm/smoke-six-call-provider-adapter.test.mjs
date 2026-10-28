@@ -195,6 +195,40 @@ test('reject malformed invoke claims and any untrusted extra argument',async()=>
   assert.equal(f.events.length,0);
  }
 });
+test('asynchronous D1 checkedAt after provider entry is valid only before post-load clock',async()=>{
+ // This represents a normal awaited D1 SELECT: provider entry at t=0,
+ // owner task read and verified at t=100ms, post-load pre-AI gate at t=120ms.
+ // The old implementation compared the D1 stamp to t=0, wrongly denied it.
+ let ticks=0;
+ const f=fixture({
+  clock:()=>++ticks===1?now:now+120,
+  mutateJob:x=>x.checkedAtMs=now+100
+ });
+ const outcome=await f.provider.invoke(request(0));
+ assert.equal(outcome.status,'FINAL_VERIFIED');
+ assert.deepEqual(f.events.map(x=>x.kind),['LOAD','AI','SAVE']);
+ assert.equal(ticks,2);
+});
+test('future D1 timestamp relative to post-load clock fails without AI',async()=>{
+ let ticks=0;
+ const f=fixture({
+  clock:()=>++ticks===1?now:now+120,
+  mutateJob:x=>x.checkedAtMs=now+121
+ });
+ await assert.rejects(()=>f.provider.invoke(request(0)),
+  /TRUSTED_D1_TASK_RECEIPT_UNVERIFIED/);
+ assert.deepEqual(f.events.map(x=>x.kind),['LOAD']);
+});
+test('slow asynchronous D1 read beyond 30 seconds fails even with a fresh returned stamp',async()=>{
+ let ticks=0;
+ const f=fixture({
+  clock:()=>++ticks===1?now:now+31000,
+  mutateJob:x=>x.checkedAtMs=now+30999
+ });
+ await assert.rejects(()=>f.provider.invoke(request(0)),
+  /PROVIDER_WINDOW_EXPIRED_OR_CHANGED/);
+ assert.deepEqual(f.events.map(x=>x.kind),['LOAD']);
+});
 test('two-step clock drift and expired provider window prevent AI',async()=>{
  for(const second of [now-1,expiry,now+31*1000]){
   let n=0;

@@ -72,7 +72,7 @@ export function corroborateSixCallReadOnly({
   return deny('WORKER_BASELINE_WATCHDOG_NOT_PROVEN_PARKED');
  if(d1.source!=='CLOUDFLARE_D1_SELECT_ONLY'||
     d1.readOnly!==true||d1.status!=='MIGRATION_UNAPPLIED_CONFIRMED'||
-    d1.schemaObjectCount!==0||d1.expectedObjectCount!==6||
+    d1.schemaObjectCount!==0||d1.expectedObjectCount!==11||
     d1.counts!==null||d1.sqlDefinitionsVerified!==false||
     d1.originalHistoricalUnknownVerified!==false)
   return deny('D1_MIGRATION_STATE_NOT_UNAPPLIED_OR_UNVERIFIED');
