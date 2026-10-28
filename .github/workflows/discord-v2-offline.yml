@@ -1,0 +1,56 @@
+name: Discord V2 Offline Harness and Loop (NO LIVE)
+on:
+  pull_request:
+    paths:
+      - 'offline_v2/**'
+      - '.github/workflows/discord-v2-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Exact dedicated branch and five-file scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BASE_REF: ${{ github.base_ref }}
+        run: |
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/v2-files.txt
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const paths=readFileSync('/tmp/v2-files.txt','utf8').trim().split('\n');
+          const allow=new Set([
+            'offline_v2/core.mjs',
+            'offline_v2/core.test.mjs',
+            'offline_v2/README.md',
+            'offline_v2/SKILLS.md',
+            '.github/workflows/discord-v2-offline.yml'
+          ]);
+          if(process.env.PR_HEAD_REF!=='offline/v2-engineering-20261028-r1'||
+             process.env.PR_BASE_REF!=='main'||paths.length!==allow.size||
+             new Set(paths).size!==allow.size||paths.some(path=>!allow.has(path)))
+            throw Error('V2_UNREVIEWED_BRANCH_OR_PATH');
+          console.log('V2_EXACT_FIVE_PATH_SCOPE_PASS');
+          NODE
+      - name: Syntax and offline harness graph loop tests
+        run: |
+          node --check offline_v2/core.mjs
+          node --check offline_v2/core.test.mjs
+          node --test offline_v2/core.test.mjs
+      - name: Existing 6-call controller regression (mock only)
+        run: |
+          node --test swarm/smoke-six-call-controller.test.mjs
+      - name: Production isolation and no new external provider calls
+        run: |
+          ! grep -R -E 'offline_v2/core|offline_v2/SKILLS' worker-loop.mjs worker-relay.mjs swarm/cron.mjs swarm/runner.mjs
+          ! grep -E '(wrangler deploy|npx wrangler|curl.*-X POST|AI\.run\(|secrets\.put\()' offline_v2/core.mjs
+          echo 'V2_OFFLINE_NO_PRODUCTION_IMPORT_OR_PROVIDER_CALLS'
