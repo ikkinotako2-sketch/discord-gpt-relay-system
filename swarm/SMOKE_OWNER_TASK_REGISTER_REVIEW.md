@@ -9,3 +9,14 @@ The reviewed six-call pipeline has a PENDING owner review record and an immutabl
 - Real local SQLite tests use existing OAuth/HMAC helpers with **fake signing secrets**, not real Cloudflare, and cover forged session, Origin, CSRF, wrong run/owner, malicious task JSON, STOP races, expired pending, duplicate calls, missing schema, immutable historical UNKNOWN and no attempt reservation.
 
 **Not done:** No production Worker import/route, no real D1 schema apply or owner task INSERT, no production backup/restore, no independent Watchdog live restore, no model/Neurons proof, no signed live authorization. The current 11-object migration remains unapplied. Real model calls 0/6. Free plan unchanged.
+
+## Async callback clock regression (review-only)
+
+The request-entry clock precedes `await loadServerReviewedTask`. A genuinely
+server-reviewed attestation stamped during that await can be later than the
+request-entry timestamp. Validation now uses a second, monotonic post-await
+clock (at most 30 seconds after entry and strictly before run expiry), then
+requires the trusted attestation timestamp to be no later than that clock and
+no older than five minutes. Local SQLite regression checks t+100ms accepted
+at post-await t+120ms, while t+121ms is rejected with no task insertion.
+This does not enable a production route or provide launch authority.

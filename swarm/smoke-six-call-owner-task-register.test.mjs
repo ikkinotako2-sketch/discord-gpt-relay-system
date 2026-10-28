@@ -75,6 +75,21 @@ test('signed owner OAuth+CSRF registers one immutable review-only task from serv
   assert.equal(f.sqlite.prepare('PRAGMA integrity_check').get().integrity_check,'ok');
  }finally{f.sqlite.close();}
 });
+test('async server review attested after request start is accepted only before post-await clock',async()=>{
+ for(const [offset,expected] of [[100,202],[121,503]]){
+  const f=await setup();try{
+   let ticks=0;
+   const response=await f.handle({}, {
+    ...f.deps,
+    clock:()=>ticks++===0?NOW:NOW+120,
+    loadServerReviewedTask:async()=>({...f.reviewed(),checkedAtMs:NOW+offset})
+   });
+   assert.equal(response.status,expected);
+   assert.equal(f.rows().length,expected===202?1:0);
+   assert.equal(ticks,2);
+  }finally{f.sqlite.close();}
+ }
+});
 test('duplicate requests never replace owner task or change original review record',async()=>{
  const f=await setup();try{
   assert.equal((await f.handle()).status,202);
