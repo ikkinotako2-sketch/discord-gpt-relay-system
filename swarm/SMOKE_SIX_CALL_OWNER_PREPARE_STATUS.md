@@ -13,6 +13,18 @@ This branch is stacked on PR #24 (which depends on #23, then #21). It adds a pro
 6. API returns 202 `PENDING_REVIEW_ONLY` with `authorizesInference:false` and `authorizesDeployment:false`. Repeated submissions return 409; tampered origin, CSRF, cookie, body, or plan is rejected. It cannot activate or run a task.
 7. Old `swarm_jobs`, including the one preserved historical UNKNOWN, remains unchanged; there is no model call, Watchdog arm, Cloudflare REST call, Secrets update, release switch or deployment.
 
+### 2026-10-28 offline async review correction
+
+The trusted `loadReviewedPlan` callback can finish after the request-entry clock.
+The handler now samples a second clock after the await and validates the
+plan attestation and 20-minute PENDING window against that time, not the
+earlier request time. A >30-second review, clock rollback, expired plan,
+or changed safe-OFF/prepare flag blocks the D1 INSERT. PENDING timestamps
+are set to the post-review clock. Adversarial local SQLite tests cover
+normal async review, timeout, expiry, rollback and mid-review flag changes.
+This is staged code only: no production route, D1 migration, model call or
+live authorization.
+
 ### Unimplemented and mandatory before ANY live rollout
 - Independent review of the existing Draft PRs #21, #23, #24 and this PR. Stacked branches must be merged in reviewed order, after separately approved scope.
 - Fresh explicit owner approval for **actual** one-time production Worker/D1 modifications, not just an OAuth session or a review request. The owner-review preparation record is **not** permission to invoke AI.
