@@ -1,0 +1,199 @@
+name: Discord D1 Watchdog Read-Only Audit 20261028
+on:
+  push:
+    branches: [audit/discord-free-safeoff-readonly-20261028-once]
+    paths:
+      - '.github/workflows/discord-d1-watchdog-readonly-20261028-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: discord-d1-watchdog-readonly-20261028
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      WATCHDOG_RESTORE_TOKEN: ${{ secrets.WATCHDOG_RESTORE_TOKEN }}
+      DISCORD_D1_READ_TOKEN: ${{ secrets.DISCORD_D1_READ_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ec73c4e3e50fff4f1e0635bebd0b6b54c24582cf
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inspect dedicated Discord D1 and parked watchdog without mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {createDiscordD1ReadClient,DISCORD_D1_URL} from './swarm/smoke-watchdog-d1.mjs';
+          import {collectSixCallD1ReadOnly} from './swarm/smoke-six-call-d1-readonly-audit.mjs';
+          import {DISCORD_SMOKE_TARGET,FLAGS} from './swarm/smoke-restore-guard.mjs';
+
+          const account=DISCORD_SMOKE_TARGET.accountId;
+          const primary=DISCORD_SMOKE_TARGET.worker;
+          const watchdog='discord-smoke-independent-watchdog-staged';
+          const baseline='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
+          const broad=process.env.CLOUDFLARE_API_TOKEN;
+          const narrow=process.env.WATCHDOG_RESTORE_TOKEN;
+          const d1Token=process.env.DISCORD_D1_READ_TOKEN;
+          if(!broad||!narrow||!d1Token)throw Error('MISSING_READ_ONLY_CREDENTIAL');
+          const auditUtcDay=new Date().toISOString().slice(0,10);
+          if(auditUtcDay!=='2026-10-28')
+            throw Error('WRONG_UTC_DATE_FOR_PINNED_AUDIT');
+
+          const base='https://api.cloudflare.com/client/v4/accounts/'+account+'/workers/scripts/';
+          async function cfGet(worker,suffix,token){
+            const r=await fetch(base+worker+suffix,{
+              method:'GET',headers:{Authorization:'Bearer '+token},
+              signal:AbortSignal.timeout(14000)
+            });
+            if(r.status!==200)throw Error('CLOUDFLARE_GET_FAILED_'+r.status+'_'+suffix.split('/').pop());
+            const json=await r.json();
+            if(json?.success!==true||json.result===undefined)
+              throw Error('CLOUDFLARE_READ_PAYLOAD_INVALID');
+            return json.result;
+          }
+          async function d1Select(sql){
+            if(!/^SELECT\s/i.test(sql)||sql.includes(';'))throw Error('NON_SELECT_SQL_BLOCKED');
+            // Cloudflare D1 REST /query takes POST, but this executes SELECT only.
+            const r=await fetch(DISCORD_D1_URL,{
+              method:'POST',headers:{
+                Authorization:'Bearer '+d1Token,
+                'Content-Type':'application/json'
+              },
+              body:JSON.stringify({sql}),signal:AbortSignal.timeout(14000)
+            });
+            if(!r.ok)throw Error('D1_SELECT_HTTP_'+r.status);
+            const x=await r.json();
+            if(x?.success!==true||x.result?.length!==1||x.result[0]?.success!==true||
+               !Array.isArray(x.result[0].results))
+              throw Error('D1_SELECT_PAYLOAD_UNVERIFIED');
+            return x.result[0].results;
+          }
+          const [deployment,primarySettings,watchSettings,watchSecrets,watchSchedules,
+            snapshot,unknownRows,budgetRows]=await Promise.all([
+              cfGet(primary,'/deployments',narrow),
+              cfGet(primary,'/settings',narrow),
+              cfGet(watchdog,'/settings',broad),
+              cfGet(watchdog,'/secrets',broad),
+              cfGet(watchdog,'/schedules',broad),
+              createDiscordD1ReadClient({token:d1Token}).snapshot(),
+              d1Select("SELECT status,calls_used,cycles,stop_requested,active_slot,last_error,created_at,updated_at,LENGTH(history_json) AS history_length,LENGTH(checkpoint) AS checkpoint_length FROM swarm_jobs WHERE status='unknown' ORDER BY created_at DESC LIMIT 2"),
+              d1Select("SELECT COALESCE(SUM(reserved),0) AS reserved FROM swarm_budget_days WHERE utc_day='"+auditUtcDay+"'")
+            ]);
+          const live=deployment?.deployments?.[0];
+          const baseline100=live?.versions?.length===1&&
+             live.versions[0].percentage===100&&live.versions[0].version_id===baseline;
+          const version=await cfGet(primary,'/versions/'+baseline,narrow);
+          function flagsOff(bindings){
+            return Array.isArray(bindings)&&FLAGS.every(key=>{
+              const arr=bindings.filter(x=>x?.name===key);
+              return arr.length<=1&&(arr.length===0||
+                (arr[0].type==='plain_text'&&arr[0].text==='false'));
+            });
+          }
+          function exactD1(bindings){
+            if(!Array.isArray(bindings))return false;
+            const matches=bindings.filter(x=>x?.name==='LOOP_DB');
+            return matches.length===1&&matches[0].type==='d1'&&
+              matches[0].database_id===DISCORD_SMOKE_TARGET.databaseId;
+          }
+          const primarySafe=baseline100&&version?.id===baseline&&
+            flagsOff(primarySettings?.bindings)&&flagsOff(version?.resources?.bindings)&&
+            exactD1(primarySettings?.bindings)&&exactD1(version?.resources?.bindings);
+          const watchBindings=watchSettings?.bindings;
+          function plain(name,value){
+            if(!Array.isArray(watchBindings))return false;
+            const arr=watchBindings.filter(x=>x?.name===name);
+            return arr.length===1&&arr[0].type==='plain_text'&&arr[0].text===value;
+          }
+          const parked=[
+            ['WATCHDOG_ARMED','false'],
+            ['WATCHDOG_APPROVAL','NOT_APPROVED'],
+            ['WATCHDOG_BASELINE_VERSION','UNSET'],
+            ['WATCHDOG_SMOKE_VERSION','UNSET'],
+            ['WATCHDOG_EXPECTED_DEPLOYMENT_ID','UNSET'],
+            ['WATCHDOG_EXPIRES_AT','UNSET']
+          ].every(([k,v])=>plain(k,v));
+          const cron=Array.isArray(watchSchedules?.schedules)&&
+             watchSchedules.schedules.length===1&&watchSchedules.schedules[0].cron==='* * * * *';
+          const secretsPresent=Array.isArray(watchSecrets)&&
+            ['WATCHDOG_RESTORE_TOKEN','WATCHDOG_D1_READ_TOKEN'].every(key=>
+              watchSecrets.filter(x=>x?.name===key).length===1
+            );
+          const expectedHistory=unknownRows.length===1&&
+            unknownRows[0].status==='unknown'&&
+            unknownRows[0].calls_used===1&&unknownRows[0].cycles===1&&
+            unknownRows[0].last_error==='MODEL_OUTCOME_UNKNOWN'&&
+            unknownRows[0].created_at===1792838702623&&
+            unknownRows[0].updated_at===1792838752941&&
+            unknownRows[0].stop_requested===0&&unknownRows[0].active_slot===null&&
+            unknownRows[0].history_length===2&&unknownRows[0].checkpoint_length===0&&
+            snapshot.unknownJobs===1;
+          const newControllerSchema=await collectSixCallD1ReadOnly({
+            d1ReadToken:d1Token
+          });
+          console.log('D1_SIX_CALL_SCHEMA_STATUS='+newControllerSchema.status);
+          if(newControllerSchema.status!=='MIGRATION_UNAPPLIED_CONFIRMED')
+            throw Error('SMOKE_SCHEMA_NOT_UNAPPLIED_OR_D1_GET_FAILED');
+          // Two independent SELECT reads of the full original UNKNOWN row,
+          // SHA-256 hashed in memory. Never log raw task/history/owner or hash.
+          // This proves same-session stability only, NOT an independently
+          // retained original fingerprint or launch authority.
+          const historyColumns=[
+            'run_id','owner_id','task','cycles','status','calls_used',
+            'revision','history_json','checkpoint','stop_requested',
+            'active_slot','lease_owner','lease_expires_at','last_error',
+            'created_at','updated_at','expires_at'
+          ];
+          const historySql='SELECT '+historyColumns.join(',')+
+            " FROM swarm_jobs WHERE status='unknown' LIMIT 2";
+          const [fullHistoryA,fullHistoryB]=await Promise.all([
+            d1Select(historySql),d1Select(historySql)
+          ]);
+          const fullHistoryShape=fullHistoryA.length===1&&
+            fullHistoryB.length===1&&
+            fullHistoryA[0].status==='unknown'&&
+            fullHistoryB[0].status==='unknown'&&
+            fullHistoryA[0].calls_used===1&&
+            fullHistoryB[0].calls_used===1;
+          const hashed=async row=>{
+            const input=JSON.stringify(historyColumns.map(k=>row[k]));
+            const d=await crypto.subtle.digest('SHA-256',
+              new TextEncoder().encode(input));
+            return Array.from(new Uint8Array(d),v=>v.toString(16).padStart(2,'0')).join('');
+          };
+          const historyStable=fullHistoryShape&&
+            (await hashed(fullHistoryA[0]))===(await hashed(fullHistoryB[0]));
+          console.log('HISTORICAL_UNKNOWN_FULL_ROW_TWO_SELECTS_MATCH='+historyStable);
+          console.log('INDEPENDENT_ORIGINAL_UNKNOWN_PIN_VERIFIED=false');
+          const reserved=budgetRows.length===1?budgetRows[0].reserved:null;
+          const zeroJobs=snapshot.legacyActive===0&&snapshot.swarmActive===0&&
+            snapshot.pendingStop===0;
+          const safeCount=Number.isSafeInteger(reserved)&&reserved>=0;
+          console.log('AUDIT_UTC_DAY='+auditUtcDay);
+          console.log('AUDIT_MAIN_PIN=ec73c4e3e50fff4f1e0635bebd0b6b54c24582cf');
+          console.log('PRIMARY_BASELINE_100_PERCENT='+baseline100);
+          console.log('PRIMARY_FLAGS_OFF_AND_DISCORD_D1_BINDING='+primarySafe);
+          console.log('WATCHDOG_PARKED='+parked);
+          console.log('WATCHDOG_ONE_MIN_CRON='+cron);
+          console.log('WATCHDOG_SECRET_NAMES_PRESENT='+secretsPresent);
+          console.log('D1_LEGACY_ACTIVE='+snapshot.legacyActive);
+          console.log('D1_SWARM_ACTIVE='+snapshot.swarmActive);
+          console.log('D1_UNKNOWN_JOBS='+snapshot.unknownJobs);
+          console.log('D1_PENDING_STOP='+snapshot.pendingStop);
+          console.log('D1_HISTORICAL_UNKNOWN_IMMUTABLE='+expectedHistory);
+          console.log('D1_UTC_DAY_RESERVED='+String(reserved));
+          console.log('D1_CLEAN='+snapshot.clean);
+          console.log('PRODUCTION_INFERENCE_AUTHORIZED=false');
+          if(!primarySafe||!parked||!cron||!secretsPresent||!zeroJobs||
+             !expectedHistory||!safeCount||!historyStable)
+            throw Error('READ_ONLY_SAFETY_INVARIANT_NOT_VERIFIED');
+          console.log('D1_AND_WATCHDOG_READONLY_AUDIT_PASS');
+          console.log('LIVE_SIX_CALL_TEST_STILL_REQUIRES_SEPARATE_APPROVAL');
+          NODE
