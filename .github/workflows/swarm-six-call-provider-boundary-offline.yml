@@ -34,9 +34,7 @@ jobs:
             'swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md',
             'swarm/verify-isolation.mjs',
             '.github/workflows/swarm-free-only-planning-offline.yml',
-            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
-            '.github/workflows/swarm-six-call-output-d1-offline.yml',
-            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
           ]);
           const outputD1Review=new Set([
             'swarm/smoke-six-call-output-artifacts.review.sql',
@@ -53,7 +51,9 @@ jobs:
             'swarm/smoke-six-call-provider-adapter.test.mjs',
             'swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md',
             'swarm/verify-isolation.mjs',
-            '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
           ]);
           const files=readFileSync('/tmp/adapter-changes.txt','utf8').trim().split('\n');
           if(![allowed,outputD1Review,asyncClockReview].some(s=>files.length===s.size&&new Set(files).size===s.size&&files.every(p=>s.has(p))))
