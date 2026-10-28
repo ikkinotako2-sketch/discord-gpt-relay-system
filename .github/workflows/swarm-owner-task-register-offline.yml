@@ -39,11 +39,23 @@ jobs:
             '.github/workflows/swarm-six-call-output-d1-offline.yml',
             '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
           ]);
+          const postClaimRowDriftReview=new Set([
+            'swarm/SMOKE_SIX_CALL_CONTROLLER_STATUS.md',
+            'swarm/smoke-six-call-controller.mjs',
+            'swarm/smoke-six-call-controller.test.mjs',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-owner-task-register-offline.yml',
+          ]);
+          const postClaimRowDriftBranch=process.env.GITHUB_HEAD_REF==='fix/offline-postclaim-state-drift-20261028';
           const files=readFileSync('/tmp/changed-reviewed-task.txt','utf8').trim().split('\n');
-          const branchOk=['feature/discord-owner-task-registration-offline-20261028',
+          const branchOk=postClaimRowDriftBranch||['feature/discord-owner-task-registration-offline-20261028',
             'fix/offline-owner-review-async-timestamp-20261028','fix/offline-owner-task-pending-window-cas-20261028'].includes(process.env.GITHUB_HEAD_REF);
-          if(!branchOk||files.length!==allowed.size||
-             new Set(files).size!==allowed.size||files.some(f=>!allowed.has(f)))
+          const scope=postClaimRowDriftBranch?postClaimRowDriftReview:allowed;
+          if(!branchOk||files.length!==scope.size||
+             new Set(files).size!==scope.size||files.some(f=>!scope.has(f)))
             throw Error('UNREVIEWED_REGISTER_CODE_PATH');
           console.log('REVIEW_TASK_EIGHT_PATH_SCOPE_PASS');
           NODE
