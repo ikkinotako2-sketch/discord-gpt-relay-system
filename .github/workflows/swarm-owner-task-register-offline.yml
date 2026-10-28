@@ -21,7 +21,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Exact eight-file reviewed scope only
+      - name: Exact eight-file review or three-file async-clock regression scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -39,10 +39,17 @@ jobs:
             '.github/workflows/swarm-six-call-output-d1-offline.yml',
             '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
           ]);
+          const narrowFix=new Set([
+            'swarm/smoke-six-call-owner-task-register.mjs',
+            'swarm/smoke-six-call-owner-task-register.test.mjs',
+            '.github/workflows/swarm-owner-task-register-offline.yml'
+          ]);
           const files=readFileSync('/tmp/changed-reviewed-task.txt','utf8').trim().split('\n');
-          if(files.length!==8||new Set(files).size!==8||files.some(f=>!allowed.has(f)))
+          const exact=s=>files.length===s.size&&new Set(files).size===s.size&&files.every(f=>s.has(f));
+          if(!(exact(allowed)||(process.env.GITHUB_HEAD_REF===
+            'fix/offline-owner-review-async-timestamp-20261028'&&exact(narrowFix))))
             throw Error('UNREVIEWED_REGISTER_CODE_PATH');
-          console.log('REVIEW_TASK_EIGHT_PATH_SCOPE_PASS');
+          console.log('REVIEW_TASK_EXACT_PATH_SCOPE_PASS');
           NODE
       - name: OAuth/CSRF and real local SQLite register tests, existing six call regression
         run: |
