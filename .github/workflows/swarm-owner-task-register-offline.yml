@@ -7,6 +7,9 @@ on:
       - 'swarm/SMOKE_OWNER_TASK_REGISTER_REVIEW.md'
       - 'swarm/verify-isolation.mjs'
       - '.github/workflows/swarm-owner-task-register-offline.yml'
+      - '.github/workflows/swarm-six-call-provider-boundary-offline.yml'
+      - '.github/workflows/swarm-six-call-output-d1-offline.yml'
+      - '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
 permissions:
   contents: read
 jobs:
@@ -18,7 +21,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Exact five-file scope only
+      - name: Exact eight-file reviewed scope only
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -31,12 +34,15 @@ jobs:
             'swarm/smoke-six-call-owner-task-register.test.mjs',
             'swarm/SMOKE_OWNER_TASK_REGISTER_REVIEW.md',
             'swarm/verify-isolation.mjs',
-            '.github/workflows/swarm-owner-task-register-offline.yml'
+            '.github/workflows/swarm-owner-task-register-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
           ]);
           const files=readFileSync('/tmp/changed-reviewed-task.txt','utf8').trim().split('\n');
-          if(files.length!==5||new Set(files).size!==5||files.some(f=>!allowed.has(f)))
+          if(files.length!==8||new Set(files).size!==8||files.some(f=>!allowed.has(f)))
             throw Error('UNREVIEWED_REGISTER_CODE_PATH');
-          console.log('REVIEW_TASK_FIVE_PATH_SCOPE_PASS');
+          console.log('REVIEW_TASK_EIGHT_PATH_SCOPE_PASS');
           NODE
       - name: OAuth/CSRF and real local SQLite register tests, existing six call regression
         run: |
