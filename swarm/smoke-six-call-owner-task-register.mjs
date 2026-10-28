@@ -136,15 +136,17 @@ export async function handleSmokeReviewedTaskRegister(request,env,{
    runId,ownerId:session.id,taskReceiptId:pending.task_receipt_id,atMs:now
   });
  }catch{return respond(503,'SERVER_TASK_REVIEW_UNVERIFIED');}
- if(!validTrustedTask(task,{
-  runId,ownerId:session.id,taskReceiptId:pending.task_receipt_id,
-  now,expiry:pending.expires_at_ms
- }))return respond(503,'SERVER_TASK_REVIEW_UNVERIFIED');
- // Recheck the time after any asynchronous server review callback.
+ // A trusted review callback may complete after the initial request clock.
+ // Validate its attestation against the post-await clock, never the older
+ // pre-await timestamp (which would reject a legitimate fresh review).
  let postReview;try{postReview=clock();}catch{return respond(503,'CLOCK_UNVERIFIED');}
  if(!MILLIS(postReview)||postReview<now||postReview>=pending.expires_at_ms||
     postReview-now>30*1000)
   return respond(503,'REVIEW_WINDOW_EXPIRED');
+ if(!validTrustedTask(task,{
+  runId,ownerId:session.id,taskReceiptId:pending.task_receipt_id,
+  now:postReview,expiry:pending.expires_at_ms
+ }))return respond(503,'SERVER_TASK_REVIEW_UNVERIFIED');
  let saved;
  try{
   saved=await db.prepare(INSERT_TASK).bind(
