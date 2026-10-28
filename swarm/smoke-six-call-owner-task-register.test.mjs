@@ -12,7 +12,7 @@ const OWNER='123456789012345678';
 const FOREIGN='999999999999999999';
 const RUN='smoke_reviewed_task_20261028';
 const RECEIPT='receipt_unique_20261028';
-const URL=COMMAND_CENTER_ORIGIN+SMOKE_REVIEW_TASK_REGISTER_PATH;
+const API_URL=COMMAND_CENTER_ORIGIN+SMOKE_REVIEW_TASK_REGISTER_PATH;
 const BASELINE='18c379e8-e759-4b2f-8300-e7a4c8b39b83';
 const SMOKE='28c379e8-e759-4b2f-8300-e7a4c8b39b83';
 const files=['schema.sql','smoke-six-call-d1-schema.review.sql',
@@ -49,7 +49,7 @@ async function setup(){
   checkedAtMs:NOW,originalTask:'Discordの安全な六役割レビュー計画'});
  const deps={clock:()=>NOW+500,loadServerReviewedTask:async()=>{callbacks++;return reviewed();}};
  const request=({method='POST',body={intent:'REGISTER_REVIEW_ONLY_TASK',runId:RUN},
-  headers={},url=URL}={})=>new Request(url,{method,headers:{
+  headers={},url=API_URL}={})=>new Request(url,{method,headers:{
    Cookie:'dc_session='+cookie,Origin:COMMAND_CENTER_ORIGIN,
    'Content-Type':'application/json','X-CSRF-Token':payload.csrf,
    'Sec-Fetch-Site':'same-origin',...headers
@@ -115,7 +115,7 @@ test('anonymous cookie, CSRF mismatch, wrong Origin, cross-site and bad content 
 test('different path, query, GET and malformed body fail before any D1 insert',async()=>{
  const f=await setup();try{
   assert.equal((await f.handle({method:'GET'})).status,405);
-  assert.equal((await f.handle({url:URL+'?debug=true'})).status,404);
+  assert.equal((await f.handle({url:API_URL+'?debug=true'})).status,404);
   assert.equal((await f.handle({url:COMMAND_CENTER_ORIGIN+'/other'})).status,404);
   assert.equal((await f.handle({body:''})).status,400);
   assert.equal(f.callbacks(),0);
