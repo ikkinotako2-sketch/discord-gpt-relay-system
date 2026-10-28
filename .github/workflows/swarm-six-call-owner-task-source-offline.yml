@@ -87,7 +87,7 @@ jobs:
             "swarm/verify-isolation.mjs",
           ]);
           const reviewedOwnerTaskBranch=['feature/discord-owner-task-registration-offline-20261028',
-            'fix/offline-owner-review-async-timestamp-20261028'].includes(process.env.GITHUB_HEAD_REF);
+            'fix/offline-owner-review-async-timestamp-20261028','fix/offline-owner-task-pending-window-cas-20261028'].includes(process.env.GITHUB_HEAD_REF);
           const reviewedOwnerTaskRegistration=new Set([
             'swarm/smoke-six-call-owner-task-register.mjs',
             'swarm/smoke-six-call-owner-task-register.test.mjs',

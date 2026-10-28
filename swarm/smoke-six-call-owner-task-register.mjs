@@ -50,12 +50,16 @@ const INSERT_TASK=`
   AND phase='PENDING' AND stop_requested=0
   AND attempts=0 AND completed=0 AND revision=0
   AND in_flight_index IS NULL
+  AND created_at_ms=? AND expires_at_ms=?
   AND created_at_ms<=? AND expires_at_ms>?
  RETURNING run_id,owner_id,task_receipt_id
 `;
 const READBACK=`
  SELECT t.run_id,t.owner_id,t.task_receipt_id,t.original_task,
- t.created_at_ms,r.phase,r.attempts,r.completed,r.stop_requested
+ t.created_at_ms,r.phase,r.attempts,r.completed,r.stop_requested,
+ r.revision,r.in_flight_index,r.account_id,r.worker_name,r.database_id,
+ r.owner_id AS run_owner_id,r.task_receipt_id AS run_task_receipt_id,
+ r.created_at_ms AS run_created_at_ms,r.expires_at_ms AS run_expires_at_ms
  FROM swarm_smoke_control_owner_tasks t
  JOIN swarm_smoke_control_runs r ON r.run_id=t.run_id
  WHERE t.run_id=? LIMIT 1
@@ -147,12 +151,17 @@ export async function handleSmokeReviewedTaskRegister(request,env,{
   runId,ownerId:session.id,taskReceiptId:pending.task_receipt_id,
   now:postReview,expiry:pending.expires_at_ms
  }))return respond(503,'SERVER_TASK_REVIEW_UNVERIFIED');
+ // The request may have awaited an external review; do not accept a later
+ // switch to enabled SWARM flags or a disabled registration capability.
+ if(env?.SMOKE_OWNER_TASK_REGISTER_ENABLED!=='true'||!safeOff(env))
+  return respond(503,'REVIEW_TASK_REGISTRATION_DISABLED');
  let saved;
  try{
   saved=await db.prepare(INSERT_TASK).bind(
    task.originalTask,postReview,runId,session.id,pending.task_receipt_id,
    DISCORD_SMOKE_TARGET.accountId,DISCORD_SMOKE_TARGET.worker,
-   DISCORD_SMOKE_TARGET.databaseId,postReview,postReview
+   DISCORD_SMOKE_TARGET.databaseId,pending.created_at_ms,
+   pending.expires_at_ms,postReview,postReview
   ).first();
  }catch{return respond(503,'TASK_INSERT_UNCERTAIN_NO_RETRY');}
  if(saved?.run_id!==runId||saved.owner_id!==session.id||
@@ -164,7 +173,15 @@ export async function handleSmokeReviewedTaskRegister(request,env,{
     row.task_receipt_id!==pending.task_receipt_id||
     row.original_task!==task.originalTask||
     row.created_at_ms!==postReview||row.phase!=='PENDING'||
-    row.stop_requested!==0||row.attempts!==0||row.completed!==0)
+    row.stop_requested!==0||row.attempts!==0||row.completed!==0||
+    row.revision!==0||row.in_flight_index!==null||
+    row.run_owner_id!==session.id||
+    row.run_task_receipt_id!==pending.task_receipt_id||
+    row.account_id!==DISCORD_SMOKE_TARGET.accountId||
+    row.worker_name!==DISCORD_SMOKE_TARGET.worker||
+    row.database_id!==DISCORD_SMOKE_TARGET.databaseId||
+    row.run_created_at_ms!==pending.created_at_ms||
+    row.run_expires_at_ms!==pending.expires_at_ms)
   return respond(503,'TASK_READBACK_UNVERIFIED_NO_RETRY');
  return respond(202,'IMMUTABLE_OWNER_TASK_REVIEW_RECORDED_NO_LIVE_AUTHORITY');
 }

@@ -20,3 +20,17 @@ requires the trusted attestation timestamp to be no later than that clock and
 no older than five minutes. Local SQLite regression checks t+100ms accepted
 at post-await t+120ms, while t+121ms is rejected with no task insertion.
 This does not enable a production route or provide launch authority.
+
+## PENDING review TOCTOU protection (offline-only)
+
+A server task review may await while another operator modifies the same PENDING
+run. The registration INSERT now pins both `created_at_ms` and `expires_at_ms`
+from the previously checked run in its single SQL INSERT-SELECT CAS. It no
+longer accepts a run whose creation or expiry moved during the await, even
+when the new time window still satisfies the D1 CHECK constraint. Readback
+also confirms owner, task receipt, account/Worker/D1, revision, STOP, in-flight
+state and both timestamps. The SWARM safe-OFF and registration-enable gates
+are rechecked after the async callback. Local SQLite race tests shift each
+clock bound and toggle flags during review; all must fail without an INSERT,
+claim, AI call or retry. Production D1 remains untouched and migration
+unapplied; this is not a live approval.

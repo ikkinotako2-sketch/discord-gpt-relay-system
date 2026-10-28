@@ -21,7 +21,7 @@ jobs:
         with: {fetch-depth: 0}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - name: Exact eight-file reviewed registration or async-clock fix scope
+      - name: Exact eight-file reviewed registration/clock/PENDING-CAS scope
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -41,7 +41,7 @@ jobs:
           ]);
           const files=readFileSync('/tmp/changed-reviewed-task.txt','utf8').trim().split('\n');
           const branchOk=['feature/discord-owner-task-registration-offline-20261028',
-            'fix/offline-owner-review-async-timestamp-20261028'].includes(process.env.GITHUB_HEAD_REF);
+            'fix/offline-owner-review-async-timestamp-20261028','fix/offline-owner-task-pending-window-cas-20261028'].includes(process.env.GITHUB_HEAD_REF);
           if(!branchOk||files.length!==allowed.size||
              new Set(files).size!==allowed.size||files.some(f=>!allowed.has(f)))
             throw Error('UNREVIEWED_REGISTER_CODE_PATH');
