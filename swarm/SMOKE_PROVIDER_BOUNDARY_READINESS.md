@@ -18,3 +18,13 @@ This patch narrows the remaining integration gap between the reviewed six-call c
 4. Live wiring from approved Worker runtime to controller, including capability names and committed output receipts. This file cannot be used in place of those missing gates.
 
 **Status: Offline mock model only. Real AI calls 0/6; production remains SAFE OFF. No paid plan or account changes.**
+
+## 2026-10-28 staged asynchronous D1 task timestamp correction (review-only)
+
+**Root cause:** `provider.invoke()` sampled `now` before awaiting the owner D1 task loader. The loader creates `checkedAtMs` only *after* an asynchronous D1 read, but `acceptedJob` previously compared that later timestamp with the **earlier** provider-entry `now`. An ordinary valid task could be rejected as "future" after a durable claim, leaving a terminal UNKNOWN without ever invoking the fake provider.
+
+**Fix:** sample a second monotonic provider clock immediately after `loadVerifiedTask`, verify the exact environment and absolute expiry again, require the elapsed read window to be 0..30 seconds, and pass **that post-load timestamp** to `acceptedJob`. The task's `checkedAtMs` must be no later than the post-load clock and at most 30 seconds old. An actually future task stamp, clock rollback, delayed read, expiry, missing flag or forged owner/receipt still fails closed before any model call. No retries or expanded inference permission.
+
+**Regression:** simulated asynchronous owner D1 timestamp t+100ms and provider post-load t+120ms must produce one **fake** AI call and one receipt; a task stamped after t+120ms and a 31-second loader delay both must result in zero model calls. The old provider fails the legitimate t+100ms case. The staged production Worker does not import this provider, and this PR does not merge any pending D1/UNKNOWN drafts.
+
+**Still blocked:** real historical UNKNOWN full-row independent pin, live D1 backup/migration/restore approval, authenticated owner task creation, live-tested independent Watchdog rollback, current account-wide Free Neurons and pinned model rights, external release exclusion, and explicit bounded owner authorization. **No Cloudflare API writes, production deploy, real AI, paid plan or historical UNKNOWN retry.**
