@@ -332,7 +332,11 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     'swarm/smoke-six-call-owner-prepare.mjs',
     'swarm/smoke-six-call-owner-prepare.test.mjs',
     'swarm/SMOKE_SIX_CALL_OWNER_PREPARE_STATUS.md',
-    'swarm/verify-isolation.mjs'
+    'swarm/verify-isolation.mjs',
+    '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+    '.github/workflows/swarm-owner-task-register-offline.yml',
+    '.github/workflows/swarm-six-call-output-d1-offline.yml',
+    '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
   ]);
   const postClaimRowDriftFiles=new Set([
     'swarm/smoke-six-call-controller.mjs',
@@ -347,7 +351,7 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   if(ownerPrepareAsyncFix&&
     (paths.length!==ownerPrepareAsyncFiles.size||
      new Set(paths).size!==ownerPrepareAsyncFiles.size))
-    throw Error('OWNER_PREPARE_ASYNC_EXACT_FOUR_FILE_SCOPE_MISMATCH');
+    throw Error('OWNER_PREPARE_ASYNC_EXACT_EIGHT_FILE_SCOPE_MISMATCH');
   if(postClaimRowDriftFix&&
     (paths.length!==postClaimRowDriftFiles.size||
      new Set(paths).size!==postClaimRowDriftFiles.size))
