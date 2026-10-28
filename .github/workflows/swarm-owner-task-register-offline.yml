@@ -1,0 +1,53 @@
+name: Discord Owner Reviewed Task Registration OFFLINE (NO D1 WRITE)
+on:
+  pull_request:
+    paths:
+      - 'swarm/smoke-six-call-owner-task-register.mjs'
+      - 'swarm/smoke-six-call-owner-task-register.test.mjs'
+      - 'swarm/SMOKE_OWNER_TASK_REGISTER_REVIEW.md'
+      - 'swarm/verify-isolation.mjs'
+      - '.github/workflows/swarm-owner-task-register-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Exact five-file scope only
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/changed-reviewed-task.txt
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const allowed=new Set([
+            'swarm/smoke-six-call-owner-task-register.mjs',
+            'swarm/smoke-six-call-owner-task-register.test.mjs',
+            'swarm/SMOKE_OWNER_TASK_REGISTER_REVIEW.md',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-owner-task-register-offline.yml'
+          ]);
+          const files=readFileSync('/tmp/changed-reviewed-task.txt','utf8').trim().split('\n');
+          if(files.length!==5||new Set(files).size!==5||files.some(f=>!allowed.has(f)))
+            throw Error('UNREVIEWED_REGISTER_CODE_PATH');
+          console.log('REVIEW_TASK_FIVE_PATH_SCOPE_PASS');
+          NODE
+      - name: OAuth/CSRF and real local SQLite register tests, existing six call regression
+        run: |
+          node --check swarm/smoke-six-call-owner-task-register.mjs
+          node --check swarm/smoke-six-call-owner-task-register.test.mjs
+          node --test swarm/smoke-six-call-owner-task-register.test.mjs \
+            swarm/smoke-six-call-owner-prepare.test.mjs \
+            swarm/smoke-six-call-owner-task-source.test.mjs \
+            swarm/smoke-six-call-provider-adapter.test.mjs \
+            swarm/smoke-six-call-output-d1.test.mjs
+      - name: No production routes or model/deploy calls
+        run: |
+          ! grep -R 'smoke-six-call-owner-task-register' worker-relay.mjs worker-loop.mjs swarm/api.mjs swarm/cron.mjs
+          echo 'OWNER_TASK_REVIEW_REGISTER_OFFLINE_ONLY_NO_D1_LIVE_WRITES'
