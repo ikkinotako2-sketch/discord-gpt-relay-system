@@ -39,6 +39,17 @@ jobs:
             '.github/workflows/swarm-six-call-output-d1-offline.yml',
             '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
           ]);
+          const ownerPrepareAsyncReview=new Set([
+            'swarm/smoke-six-call-owner-prepare.mjs',
+            'swarm/smoke-six-call-owner-prepare.test.mjs',
+            'swarm/SMOKE_SIX_CALL_OWNER_PREPARE_STATUS.md',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-owner-task-register-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+          ]);
+          const ownerPrepareAsyncBranch=process.env.GITHUB_HEAD_REF==='fix/offline-owner-prepare-async-review-20261028';
           const postClaimRowDriftReview=new Set([
             'swarm/SMOKE_SIX_CALL_CONTROLLER_STATUS.md',
             'swarm/smoke-six-call-controller.mjs',
@@ -51,9 +62,9 @@ jobs:
           ]);
           const postClaimRowDriftBranch=process.env.GITHUB_HEAD_REF==='fix/offline-postclaim-state-drift-20261028';
           const files=readFileSync('/tmp/changed-reviewed-task.txt','utf8').trim().split('\n');
-          const branchOk=postClaimRowDriftBranch||['feature/discord-owner-task-registration-offline-20261028',
+          const branchOk=ownerPrepareAsyncBranch||postClaimRowDriftBranch||['feature/discord-owner-task-registration-offline-20261028',
             'fix/offline-owner-review-async-timestamp-20261028','fix/offline-owner-task-pending-window-cas-20261028'].includes(process.env.GITHUB_HEAD_REF);
-          const scope=postClaimRowDriftBranch?postClaimRowDriftReview:allowed;
+          const scope=ownerPrepareAsyncBranch?ownerPrepareAsyncReview:postClaimRowDriftBranch?postClaimRowDriftReview:allowed;
           if(!branchOk||files.length!==scope.size||
              new Set(files).size!==scope.size||files.some(f=>!scope.has(f)))
             throw Error('UNREVIEWED_REGISTER_CODE_PATH');

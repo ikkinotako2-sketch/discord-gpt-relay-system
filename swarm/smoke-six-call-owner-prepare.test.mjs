@@ -223,3 +223,49 @@ test('no released start route or model invocation exists in this module',async()
   assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM swarm_budget_days').get().n,0);
  }finally{f.sqlite.close();}
 });
+
+test('async trusted plan attestation uses post-review clock and fresh PENDING timestamps',async()=>{
+ const f=await authFixture();try{
+  let tick=0;
+  const r=await handleSmokeOwnerPrepare(request(f),f.env,{
+   ...f.deps,clock:()=>++tick===1?NOW:NOW+120,
+   loadReviewedPlan:async()=>({...validPlan(),checkedAtMs:NOW+100})
+  });
+  assert.equal(r.status,202);
+  assert.equal(count(f),1);
+  assert.equal(rows(f)[0].created_at_ms,NOW+120);
+  assert.equal(rows(f)[0].updated_at_ms,NOW+120);
+ }finally{f.sqlite.close();}
+});
+test('delayed, reversed or expired async plan cannot create PENDING',async()=>{
+ const f=await authFixture();try{
+  for(const [later,expiry] of [
+   [NOW+31000,NOW+15*60*1000],
+   [NOW-1,NOW+15*60*1000],
+   [NOW+120,NOW+100]
+  ]){
+   let tick=0;
+   const r=await handleSmokeOwnerPrepare(request(f),f.env,{
+    ...f.deps,clock:()=>++tick===1?NOW:later,
+    loadReviewedPlan:async()=>({...validPlan(),
+     checkedAtMs:Math.min(later,NOW),expiresAtMs:expiry})
+   });
+   assert.equal(r.status,503);
+  }
+  assert.equal(count(f),0);
+ }finally{f.sqlite.close();}
+});
+test('safe-OFF or registration disabled during async review blocks pending write',async()=>{
+ for(const key of ['SWARM_RUNNER_ENABLED','SMOKE_OWNER_PREPARE_ENABLED']){
+  const f=await authFixture();try{
+   const r=await handleSmokeOwnerPrepare(request(f),f.env,{
+    ...f.deps,loadReviewedPlan:async()=>{
+     f.env[key]=key==='SWARM_RUNNER_ENABLED'?'true':'false';
+     return validPlan();
+    }
+   });
+   assert.equal(r.status,503);
+   assert.equal(count(f),0);
+  }finally{f.sqlite.close();}
+ }
+});

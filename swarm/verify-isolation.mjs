@@ -52,8 +52,9 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
   const combinedUnknownAndElevenD1Review=base==='main'&&process.env.GITHUB_HEAD_REF==='review/discord-six-call-unknown-d1-integrated-20261028';
   const combinedUnknownD1AndProviderClockReview=base==='main'&&process.env.GITHUB_HEAD_REF==='review/discord-six-call-unknown-d1-provider-clock-integrated-20261028';
   const postClaimRowDriftFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/offline-postclaim-state-drift-20261028';
+  const ownerPrepareAsyncFix=base==='main'&&process.env.GITHUB_HEAD_REF==='fix/offline-owner-prepare-async-review-20261028';
   const taskRegistrationReview=base==='main'&&['feature/discord-owner-task-registration-offline-20261028','fix/offline-owner-review-async-timestamp-20261028','fix/offline-owner-task-pending-window-cas-20261028'].includes(process.env.GITHUB_HEAD_REF);
-  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop&&!releaseFence&&!quotaReview&&!githubReadOnly&&!d1ReadOnly&&!workerGet&&!crossEvidence&&!ddlIntegrity&&!postClaimStop&&!reviewedFinalBundle&&!freeOnlyReview&&!providerBoundary&&!outputD1Review&&!ownerTaskSourceReview&&!elevenObjectAudit&&!combinedUnknownAndElevenD1Review&&!combinedUnknownD1AndProviderClockReview&&!taskRegistrationReview&&!postClaimRowDriftFix)
+  if(!safetyFix&&!priorIntegration&&!smokeFix&&!autoOffGuard&&!restoreExecutor&&!independentWatchdog&&!liveEvidence&&!watchdogShadowFix&&!prearmSafetyFix&&!modelErrorSafetyFix&&!unknownReviewFix&&!shapeDiagnosticFix&&!reviewedHistoricalPreflight&&!githubOwnerReviewFix&&!readOnlyHistoricalFix&&!sixCallController&&!sixCallD1&&!ownerPrepare&&!safeStop&&!releaseFence&&!quotaReview&&!githubReadOnly&&!d1ReadOnly&&!workerGet&&!crossEvidence&&!ddlIntegrity&&!postClaimStop&&!reviewedFinalBundle&&!freeOnlyReview&&!providerBoundary&&!outputD1Review&&!ownerTaskSourceReview&&!elevenObjectAudit&&!combinedUnknownAndElevenD1Review&&!combinedUnknownD1AndProviderClockReview&&!taskRegistrationReview&&!postClaimRowDriftFix&&!ownerPrepareAsyncFix)
     throw Error('Unexpected PR base or integration branch');
   const paths=execFileSync('git',['diff','--name-only','origin/'+base+'...HEAD'],{
     encoding:'utf8',maxBuffer:1024*1024}).trim().split('\n').filter(Boolean);
@@ -327,6 +328,16 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     '.github/workflows/swarm-six-call-output-d1-offline.yml',
     '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
   ]);
+  const ownerPrepareAsyncFiles=new Set([
+    'swarm/smoke-six-call-owner-prepare.mjs',
+    'swarm/smoke-six-call-owner-prepare.test.mjs',
+    'swarm/SMOKE_SIX_CALL_OWNER_PREPARE_STATUS.md',
+    'swarm/verify-isolation.mjs',
+    '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+    '.github/workflows/swarm-owner-task-register-offline.yml',
+    '.github/workflows/swarm-six-call-output-d1-offline.yml',
+    '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
+  ]);
   const postClaimRowDriftFiles=new Set([
     'swarm/smoke-six-call-controller.mjs',
     'swarm/smoke-six-call-controller.test.mjs',
@@ -337,6 +348,10 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
     '.github/workflows/swarm-owner-task-register-offline.yml'
   ]);
+  if(ownerPrepareAsyncFix&&
+    (paths.length!==ownerPrepareAsyncFiles.size||
+     new Set(paths).size!==ownerPrepareAsyncFiles.size))
+    throw Error('OWNER_PREPARE_ASYNC_EXACT_EIGHT_FILE_SCOPE_MISMATCH');
   if(postClaimRowDriftFix&&
     (paths.length!==postClaimRowDriftFiles.size||
      new Set(paths).size!==postClaimRowDriftFiles.size))
@@ -345,7 +360,7 @@ if(process.env.GITHUB_ACTIONS==='true'&&process.env.GITHUB_BASE_REF){
     (paths.length!==taskRegistrationFiles.size||
      new Set(paths).size!==taskRegistrationFiles.size))
     throw Error('OWNER_TASK_EXACT_EIGHT_FILE_SCOPE_MISMATCH');
-  const illegal=paths.filter(path=>postClaimRowDriftFix ? !postClaimRowDriftFiles.has(path) : taskRegistrationReview ? !taskRegistrationFiles.has(path) : combinedUnknownD1AndProviderClockReview ? !combinedUnknownD1AndProviderClockFiles.has(path) : combinedUnknownAndElevenD1Review ? !combinedUnknownAndElevenD1Files.has(path) : elevenObjectAudit ? !elevenObjectAuditFiles.has(path) : ownerTaskSourceReview ? !ownerTaskSourceFiles.has(path) : outputD1Review ? !outputD1Files.has(path) : providerBoundary ? !providerBoundaryFiles.has(path) : freeOnlyReview ? !freeOnlyReviewFiles.has(path) : reviewedFinalBundle ? !reviewedBundleFiles.has(path) : postClaimStop ? !postClaimStopFiles.has(path) : ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
+  const illegal=paths.filter(path=>ownerPrepareAsyncFix ? !ownerPrepareAsyncFiles.has(path) : postClaimRowDriftFix ? !postClaimRowDriftFiles.has(path) : taskRegistrationReview ? !taskRegistrationFiles.has(path) : combinedUnknownD1AndProviderClockReview ? !combinedUnknownD1AndProviderClockFiles.has(path) : combinedUnknownAndElevenD1Review ? !combinedUnknownAndElevenD1Files.has(path) : elevenObjectAudit ? !elevenObjectAuditFiles.has(path) : ownerTaskSourceReview ? !ownerTaskSourceFiles.has(path) : outputD1Review ? !outputD1Files.has(path) : providerBoundary ? !providerBoundaryFiles.has(path) : freeOnlyReview ? !freeOnlyReviewFiles.has(path) : reviewedFinalBundle ? !reviewedBundleFiles.has(path) : postClaimStop ? !postClaimStopFiles.has(path) : ddlIntegrity ? !ddlIntegrityFiles.has(path) : crossEvidence ? !crossEvidenceFiles.has(path) : workerGet ? !workerGetFiles.has(path) : d1ReadOnly ? !d1ReadOnlyFiles.has(path) : githubReadOnly ? !githubReadOnlyFiles.has(path) : quotaReview ? !quotaReviewFiles.has(path) : releaseFence ? !releaseFenceFiles.has(path) : safeStop ? !safeStopFiles.has(path) : ownerPrepare ? !ownerPrepareFiles.has(path) : sixCallD1 ? !sixCallD1Files.has(path) : sixCallController ? !sixCallFiles.has(path) : readOnlyHistoricalFix ? !readOnlyHistoricalPaths.has(path) : githubOwnerReviewFix ? !githubReviewPaths.has(path) : reviewedHistoricalPreflight ? !reviewedPreflightPaths.has(path) : shapeDiagnosticFix ? !shapeDiagnosticPaths.has(path) : unknownReviewFix ? !unknownReviewPaths.has(path) : modelErrorSafetyFix ? !modelErrorFixPaths.has(path) : prearmSafetyFix ? !prearmFixPaths.has(path) : watchdogShadowFix ? !watchdogShadowFixPaths.has(path) : liveEvidence ? !liveEvidencePaths.has(path) : independentWatchdog ? !watchdogFiles.has(path) : restoreExecutor ? !restoreExecutorFiles.has(path) : autoOffGuard ? !autoOffFiles.has(path) : smokeFix ? !smokeFiles.has(path) : safetyFix
     ? !safetyFixPaths.has(path)
     : (path!=='.github/workflows/swarm-offline-tests.yml'&&
        !path.startsWith('swarm/')&&!extra.has(path)));

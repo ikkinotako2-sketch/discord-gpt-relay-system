@@ -105,7 +105,16 @@ export async function handleSmokeOwnerPrepare(request,env,{
  let plan;
  try{plan=await loadReviewedPlan({atMs:now,ownerId:session.id});}
  catch{return reply(503,'REVIEW_PLAN_UNVERIFIED');}
- if(!exactPlan(plan,now))return reply(503,'REVIEW_PLAN_UNVERIFIED');
+ // The trusted callback can complete after request entry. Use a second
+ // clock for attestation freshness and refuse long, reversed or expired
+ // reviews, or a concurrent switch away from safe-OFF.
+ let postReview;try{postReview=clock();}catch{return reply(503,'CLOCK_UNVERIFIED');}
+ if(!Number.isSafeInteger(postReview)||postReview<now||
+    postReview-now>30*1000||!exactPlan(plan,postReview)||
+    postReview>=plan.expiresAtMs)
+   return reply(503,'REVIEW_PLAN_UNVERIFIED_OR_EXPIRED');
+ if(env?.SMOKE_OWNER_PREPARE_ENABLED!=='true'||!exactSafeOffEnv(env))
+   return reply(503,'PREPARE_DISABLED_AFTER_REVIEW');
  let runId,taskReceiptId;
  try{
   runId='smoke_'+idFactory();
@@ -115,7 +124,7 @@ export async function handleSmokeOwnerPrepare(request,env,{
   return reply(503,'ID_GENERATION_FAILED');
  const pending=makeSixCallCandidate({
   runId,taskReceiptId,baselineVersion:plan.baselineVersion,
-  smokeVersion:plan.smokeVersion,nowMs:now,expiresAtMs:plan.expiresAtMs
+  smokeVersion:plan.smokeVersion,nowMs:postReview,expiresAtMs:plan.expiresAtMs
  });
  if(pending.phase!=='PENDING_EXTERNAL_ACTIVATION')
   return reply(503,'INVALID_REVIEW_SCOPE');
@@ -126,7 +135,7 @@ export async function handleSmokeOwnerPrepare(request,env,{
   const created=await db.prepare(INSERT_PENDING).bind(
     runId,session.id,taskReceiptId,pending.target.accountId,
     pending.target.worker,pending.target.databaseId,
-    pending.baselineVersion,pending.smokeVersion,now,now,pending.expiresAtMs
+    pending.baselineVersion,pending.smokeVersion,postReview,postReview,pending.expiresAtMs
   ).first();
   if(created?.run_id!==runId)return reply(503,'PENDING_WRITE_UNVERIFIED');
   return reply(202,'PENDING_REVIEW_ONLY',{runId,attemptLimit:6,
