@@ -196,6 +196,40 @@ test('pending run changed to STOP during asynchronous review is refused by INSER
   assert.equal(resp.status,503);assert.equal(f.rows().length,0);
  }finally{f.sqlite.close();}
 });
+test('pending run clock identity cannot drift while server review is awaited',async()=>{
+ for(const sql of [
+  'UPDATE swarm_smoke_control_runs SET created_at_ms=created_at_ms-1000',
+  'UPDATE swarm_smoke_control_runs SET expires_at_ms=expires_at_ms+1000',
+  'UPDATE swarm_smoke_control_runs SET created_at_ms=created_at_ms-1000,expires_at_ms=expires_at_ms-1000'
+ ]){
+  const f=await setup();try{
+   const resp=await f.handle({}, {
+    ...f.deps,loadServerReviewedTask:async()=>{
+     f.sqlite.exec(sql);return f.reviewed();
+    }
+   });
+   assert.equal(resp.status,503,sql);
+   assert.equal(f.rows().length,0,sql);
+   assert.equal(f.sqlite.prepare('SELECT COUNT(*) n FROM swarm_smoke_control_claims').get().n,0);
+  }finally{f.sqlite.close();}
+ }
+});
+test('turning SWARM ON or disabling registration while reviewing cannot insert',async()=>{
+ for(const change of [
+  env=>{env[FLAGS[0]]='true';},
+  env=>{env.SMOKE_OWNER_TASK_REGISTER_ENABLED='false';}
+ ]){
+  const f=await setup();try{
+   const resp=await f.handle({}, {
+    ...f.deps,loadServerReviewedTask:async()=>{
+     change(f.env);return f.reviewed();
+    }
+   });
+   assert.equal(resp.status,503);
+   assert.equal(f.rows().length,0);
+  }finally{f.sqlite.close();}
+ }
+});
 test('missing actual task schema or ambiguous D1 read does not use a retry',async()=>{
  const f=await setup();try{
   f.sqlite.exec('DROP TRIGGER swarm_smoke_control_owner_task_scope');
