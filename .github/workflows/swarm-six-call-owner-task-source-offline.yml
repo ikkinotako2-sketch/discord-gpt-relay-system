@@ -66,8 +66,28 @@ jobs:
             "swarm/verify-isolation.mjs",
             "swarm/SMOKE_SIX_CALL_UNKNOWN_D1_COMBINED_REVIEW.md",
           ]);
+          const combinedUnknownD1AndProviderClockReview=new Set([
+            ".github/workflows/swarm-six-call-output-d1-offline.yml",
+            ".github/workflows/swarm-six-call-owner-task-source-offline.yml",
+            ".github/workflows/swarm-six-call-provider-boundary-offline.yml",
+            "swarm/SMOKE_SIX_CALL_D1_DDL_INTEGRITY.md",
+            "swarm/SMOKE_SIX_CALL_UNKNOWN_D1_COMBINED_REVIEW.md",
+            "swarm/SMOKE_PROVIDER_BOUNDARY_READINESS.md",
+            "swarm/smoke-six-call-cross-evidence.mjs",
+            "swarm/smoke-six-call-cross-evidence.test.mjs",
+            "swarm/smoke-six-call-d1-ddl-digest.mjs",
+            "swarm/smoke-six-call-d1-ddl-digest.test.mjs",
+            "swarm/smoke-six-call-d1-readonly-audit.mjs",
+            "swarm/smoke-six-call-d1-readonly-audit.test.mjs",
+            "swarm/smoke-six-call-migration-acceptance.test.mjs",
+            "swarm/smoke-six-call-owner-task-source.mjs",
+            "swarm/smoke-six-call-owner-task-source.test.mjs",
+            "swarm/smoke-six-call-provider-adapter.mjs",
+            "swarm/smoke-six-call-provider-adapter.test.mjs",
+            "swarm/verify-isolation.mjs",
+          ]);
           const paths=readFileSync('/tmp/owner-task-changed.txt','utf8').trim().split('\n');
-          if(![allow,elevenObjectAudit,combinedUnknownAndElevenD1Review].some(s=>paths.length===s.size&&
+          if(![allow,elevenObjectAudit,combinedUnknownAndElevenD1Review,combinedUnknownD1AndProviderClockReview].some(s=>paths.length===s.size&&
              new Set(paths).size===s.size&&paths.every(x=>s.has(x))))
             throw Error('OWNER_TASK_CHANGE_SCOPE_NOT_REVIEWED');
           console.log('OWNER_TASK_EXACT_REVIEWED_SCOPE_PASS');

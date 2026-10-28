@@ -101,14 +101,17 @@ export function createStagedSixCallAIProvider({
         runId:request.runId,taskReceiptId:request.taskReceiptId,
         stageIndex:request.stageIndex,claimRevision:request.claimRevision
       });
-      if(!acceptedJob(job,request,env,now))
-        return FAIL('TRUSTED_D1_TASK_RECEIPT_UNVERIFIED');
-      // The controller separately does a durable post-claim STOP check, and
-      // always settles an ambiguous provider outcome as terminal UNKNOWN.
-      // We also re-check the last possible clock/config point before AI.run.
+      // The D1 reader samples checkedAtMs *after* this invoke's first
+      // clock(). Comparing it with the entry timestamp would reject ordinary
+      // asynchronous reads as "future" and consume a claimed attempt as
+      // UNKNOWN without calling AI. Check it against the post-load clock.
+      // A rollback, expiry, or >30s read gap still fails closed.
+      // The controller separately does a durable post-claim STOP check.
       let finalTime;try{finalTime=clock();}catch{return FAIL('PROVIDER_CLOCK_UNVERIFIED');}
-      if(!exactEnv(env,finalTime)||finalTime<now||finalTime-job.checkedAtMs>30*1000)
+      if(!exactEnv(env,finalTime)||finalTime<now||finalTime-now>30*1000)
         return FAIL('PROVIDER_WINDOW_EXPIRED_OR_CHANGED');
+      if(!acceptedJob(job,request,env,finalTime))
+        return FAIL('TRUSTED_D1_TASK_RECEIPT_UNVERIFIED');
       const messages=sixCallRoleMessages(job);
       const result=await env.AI.run(GPT_OSS_MODEL,{
         messages,max_tokens:SIX_CALL_OUTPUT_TOKEN_LIMIT,

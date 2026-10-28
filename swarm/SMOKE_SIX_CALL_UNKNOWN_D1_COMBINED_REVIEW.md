@@ -22,3 +22,10 @@ The exact diff against `main=36e2d5900ebca2263ac629a0f325ec774cd280a2` must cont
 5. New execution-day Cloudflare read-only Worker/D1/Watchdog state; old snapshots are not sufficient.
 
 No D1 writes, Cloudflare Worker deployment, SWARM flag ON, Watchdog POST, Secrets or API token changes, real AI inference, billing, YouTube/PLM changes, or historical UNKNOWN retry. **Real six-call attempts remain 0/6.** Any release action remains **BLOCKED** until separately authorized and independently verified.
+
+
+## 2026-10-28: additional review-only provider clock integration
+
+This integration candidate starts from **Draft PR #42** at `86390f5dd279e0db8a67b39d82e473b6e65c9910` and imports the exact provider clock fix and offline regression from **Draft PR #43** at `a52b591d968c089e6f1950b5ccb35e0944885c4d`. Three overlapping workflow/isolation files are explicitly reconciled. The final diff against main must contain **exactly 18 named offline-only files** (the union of #42's 14 and #43's 7). All three dependent workflows and the central isolation checker must fail closed on any extra, missing, or production path. This is a review-only code combination, not permission to merge or deploy.
+
+CI is required to pass at the exact integrated head before any review decision. Neither historical UNKNOWN nor Cloudflare D1, Worker, Watchdog, Secrets, flags, billing, or Workers AI is touched by this GitHub-only review. Original UNKNOWN full-row independent live pin, fresh account-wide Free Neurons and model rights, OAuth+CSRF, D1 backup/migration authorization, Watchdog real rollback, external release fence, and explicit owner authorization remain mandatory.
