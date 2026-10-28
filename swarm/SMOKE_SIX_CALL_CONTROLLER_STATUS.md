@@ -31,3 +31,15 @@ node --test swarm/smoke-six-call-controller.test.mjs
 ```
 
 **Production test counter remains 0 / 6.** Existing live Worker remains unchanged and safe OFF.
+
+
+### 2026-10-28 post-claim state-drift guard (offline review)
+
+After a durable once-only claim, the controller's second D1 state read must
+also match the initially pinned `createdAtMs` and continue reporting
+`historicalUnknownPreserved===true`. Previously these two fields were checked
+before the claim but not after it, so a simulated mid-await mutation could
+reach the mock provider. An adversarial unit test now requires one consumed
+claim, zero mock inference calls and terminal UNKNOWN_STOP on either drift.
+This is a staged controller-only change: it does not independently prove the
+original historical UNKNOWN row, activate the Worker, or authorize live calls.

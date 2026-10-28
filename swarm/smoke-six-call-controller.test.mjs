@@ -152,6 +152,30 @@ test('expiry before claim, and after claim before invoke, never runs inference',
  const r=await runSixCallStep({...g,clock:()=>{times++;return times<3?now:now+20*60*1000}});
  assert.equal(r.status,'UNKNOWN_STOP');assert.equal(g.calls,0);assert.equal(g.store.claims,1);
 });
+test('post-claim creation-time or historical UNKNOWN drift consumes claim without invoking AI',async()=>{
+ for(const [field,value] of [
+  ['createdAtMs',now+1000],
+  ['historicalUnknownPreserved',false]
+ ]){
+  const store=memoryStore();
+  const originalClaim=store.claimOnce;
+  store.claimOnce=async args=>{
+   const claim=await originalClaim(args);
+   assert.equal(claim.claimed,true);
+   store.current[field]=value;
+   return claim;
+  };
+  const f=fixture({store});
+  const result=await runSixCallStep(f);
+  assert.equal(result.status,'UNKNOWN_STOP',field);
+  assert.equal(result.attempts,1,field);
+  assert.equal(result.completed,0,field);
+  assert.equal(store.claims,1,field);
+  assert.equal(f.calls,0,field);
+  assert.equal((await runSixCallStep(f)).status,'BLOCKED',field);
+ }
+});
+
 test('duplicated simultaneous scheduler ticks get one durable claim',async()=>{
  const f=fixture();
  const results=await Promise.all([runSixCallStep(f),runSixCallStep(f)]);

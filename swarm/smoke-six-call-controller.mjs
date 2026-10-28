@@ -121,6 +121,8 @@ export async function runSixCallStep({store,liveEvidence,provider,clock=Date.now
       rechecked.baselineVersion!==s.baselineVersion||
       rechecked.smokeVersion!==s.smokeVersion||
       rechecked.expiresAtMs!==s.expiresAtMs||
+      rechecked.createdAtMs!==s.createdAtMs||
+      rechecked.historicalUnknownPreserved!==true||
       rechecked.phase!=='ACTIVE'||rechecked.stopRequested!==false||
       rechecked.attempts!==index+1||rechecked.completed!==index||
       rechecked.inFlightIndex!==index||

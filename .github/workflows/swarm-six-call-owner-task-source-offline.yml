@@ -86,6 +86,17 @@ jobs:
             "swarm/smoke-six-call-provider-adapter.test.mjs",
             "swarm/verify-isolation.mjs",
           ]);
+          const postClaimRowDriftReview=new Set([
+            'swarm/SMOKE_SIX_CALL_CONTROLLER_STATUS.md',
+            'swarm/smoke-six-call-controller.mjs',
+            'swarm/smoke-six-call-controller.test.mjs',
+            'swarm/verify-isolation.mjs',
+            '.github/workflows/swarm-six-call-owner-task-source-offline.yml',
+            '.github/workflows/swarm-six-call-output-d1-offline.yml',
+            '.github/workflows/swarm-six-call-provider-boundary-offline.yml',
+            '.github/workflows/swarm-owner-task-register-offline.yml',
+          ]);
+          const postClaimRowDriftBranch=process.env.GITHUB_HEAD_REF==='fix/offline-postclaim-state-drift-20261028';
           const reviewedOwnerTaskBranch=['feature/discord-owner-task-registration-offline-20261028',
             'fix/offline-owner-review-async-timestamp-20261028','fix/offline-owner-task-pending-window-cas-20261028'].includes(process.env.GITHUB_HEAD_REF);
           const reviewedOwnerTaskRegistration=new Set([
@@ -99,7 +110,7 @@ jobs:
             '.github/workflows/swarm-six-call-owner-task-source-offline.yml'
           ]);
           const paths=readFileSync('/tmp/owner-task-changed.txt','utf8').trim().split('\n');
-          if(![allow,elevenObjectAudit,combinedUnknownAndElevenD1Review,combinedUnknownD1AndProviderClockReview,...(reviewedOwnerTaskBranch?[reviewedOwnerTaskRegistration]:[])].some(s=>paths.length===s.size&&
+          if(![allow,elevenObjectAudit,combinedUnknownAndElevenD1Review,combinedUnknownD1AndProviderClockReview,...(reviewedOwnerTaskBranch?[reviewedOwnerTaskRegistration]:[]),...(postClaimRowDriftBranch?[postClaimRowDriftReview]:[])].some(s=>paths.length===s.size&&
              new Set(paths).size===s.size&&paths.every(x=>s.has(x))))
             throw Error('OWNER_TASK_CHANGE_SCOPE_NOT_REVIEWED');
           console.log('OWNER_TASK_EXACT_REVIEWED_SCOPE_PASS');
