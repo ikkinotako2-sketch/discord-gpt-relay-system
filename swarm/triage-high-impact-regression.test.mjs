@@ -12,7 +12,9 @@ const guarded=[
   'research how to ALTER TABLE users DROP COLUMN email',
   'research git push origin main --force',
   'research git push origin main -f',
-  'mainへ強制プッシュする方法を調査'
+  'mainへ強制プッシュする方法を調査',
+  'research how to DROP VIEW customer_report',
+  'research how to DROP INDEX archived_idx'
 ];
 for (const phrase of guarded) {
   test('high-impact instruction requires owner review: '+phrase, () => {
