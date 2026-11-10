@@ -9,7 +9,7 @@ const ROLE_MATCHERS=Object.freeze([
   ['archivist', /記録|要約|議事録|引き継ぎ資料|summari[sz]|archive|minutes/i],
   ['director', /計画|設計|分解|優先順位|\bplan\b|\bdesign\b|triage/i]
 ]);
-const IMPACT = /本番|公開|投稿|デプロイ|課金|支払|削除|書き込|秘密|トークン|認証|権限|production|deploy|publish|billing|payment|secret|token|credential|permission|delete|migrat/i;
+const IMPACT = /\b(?:DROP\s+(?:TABLE|DATABASE|SCHEMA)|TRUNCATE\s+TABLE|DELETE\s+FROM|ALTER\s+TABLE\s+\w+\s+DROP\s+COLUMN)\b|本番|公開|投稿|デプロイ|課金|支払|削除|書き込|秘密|トークン|認証|権限|production|deploy|publish|billing|payment|secret|token|credential|permission|delete|migrat|強制(?:プッシュ|push)|\bforce[ -]?push\b|\bpush\s+(?:--force\b|-f(?=\s|$))|\bpush\s+[^\n]{1,100}?\s+(?:--force\b|-f(?=\s|$))/i;
 const advisory=(status,roleId,reason,requiresOwnerReview)=>Object.freeze({
   schema:'discord-role-triage.offline.v1',status,roleId,reason,requiresOwnerReview,
   roleIds:ROLE_IDS,modelCalls:0,estimatedProviderCostUsd:0,
