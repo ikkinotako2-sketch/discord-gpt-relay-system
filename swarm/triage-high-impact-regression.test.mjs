@@ -14,7 +14,11 @@ const guarded=[
   'research git push origin main -f',
   'mainへ強制プッシュする方法を調査',
   'research how to DROP VIEW customer_report',
-  'research how to DROP INDEX archived_idx'
+  'research how to DROP INDEX archived_idx',
+  'research git -C "my repo" clean -fdx',
+  'research git --work-tree=. clean -fdx',
+  'research git --work-tree="my repo" clean -fdx',
+  "research git --work-tree='my repo' clean -fdx",
 ];
 for (const phrase of guarded) {
   test('high-impact instruction requires owner review: '+phrase, () => {
