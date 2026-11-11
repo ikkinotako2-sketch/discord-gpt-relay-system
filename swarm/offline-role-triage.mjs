@@ -9,7 +9,7 @@ const ROLE_MATCHERS=Object.freeze([
   ['archivist', /記録|要約|議事録|引き継ぎ資料|summari[sz]|archive|minutes/i],
   ['director', /計画|設計|分解|優先順位|\bplan\b|\bdesign\b|triage/i]
 ]);
-const IMPACT = /\b(?:DROP\s+(?:TABLE|DATABASE|SCHEMA|VIEW|INDEX)|TRUNCATE\s+TABLE|DELETE\s+FROM|ALTER\s+TABLE\s+\w+\s+DROP\s+COLUMN)\b|本番|公開|投稿|デプロイ|課金|支払|削除|書き込|秘密|トークン|認証|権限|production|deploy|publish|billing|payment|secret|token|credential|permission|delete|migrat|強制(?:プッシュ|push)|\bforce[ -]?push\b|\bpush\s+(?:--force\b|-f(?=\s|$))|\bpush\s+[^\n]{1,100}?\s+(?:--force\b|-f(?=\s|$))/i;
+const IMPACT = /\bgit(?:\s+-C\s+(?:"[^"\n]{1,100}"|\x27[^\x27\n]{1,100}\x27|[^\s]+))?(?:\s+--work-tree=(?:"[^"\n]{1,100}"|\x27[^\x27\n]{1,100}\x27|[^\s]+))?\s+clean\s+(?:(?!--dry-run\b|-n\b)[^\n]{0,100}?)?(?:--force\b|-[a-z]*f[a-z]*\b)|\bgit(?:\s+-C\s+[^\s]+)?\s+reset\s+--hard\b|\b(?:DROP\s+(?:TABLE|DATABASE|SCHEMA|VIEW|INDEX)|TRUNCATE\s+TABLE|DELETE\s+FROM|ALTER\s+TABLE\s+\w+\s+DROP\s+COLUMN)\b|本番|公開|投稿|デプロイ|課金|支払|削除|書き込|秘密|トークン|認証|権限|production|deploy|publish|billing|payment|secret|token|credential|permission|delete|migrat|強制(?:プッシュ|push)|\bforce[ -]?push\b|\bpush\s+(?:--force\b|-f(?=\s|$))|\bpush\s+[^\n]{1,100}?\s+(?:--force\b|-f(?=\s|$))/i;
 const advisory=(status,roleId,reason,requiresOwnerReview)=>Object.freeze({
   schema:'discord-role-triage.offline.v1',status,roleId,reason,requiresOwnerReview,
   roleIds:ROLE_IDS,modelCalls:0,estimatedProviderCostUsd:0,
