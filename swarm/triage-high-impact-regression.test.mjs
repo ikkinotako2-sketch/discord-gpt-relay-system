@@ -37,3 +37,32 @@ test('ordinary offline research remains advisory',()=>{
   assert.equal(r.status,'ADVISORY_ONLY');
   assert.equal(r.requiresOwnerReview,false);
 });
+
+const sqlWriteRequests=[
+  'research UPDATE users SET active = 0',
+  'research UPDATE "user profile" SET active = 0',
+  'research INSERT INTO users VALUES (1)',
+  'research INSERT OR REPLACE INTO users VALUES (1)',
+  'research REPLACE INTO users VALUES (1)',
+  'research MERGE INTO users USING incoming',
+];
+for(const phrase of sqlWriteRequests){
+  test('SQL row mutation requires owner review: '+phrase,()=>{
+    const r=triageOfflineTask(phrase);
+    assert.equal(r.status,'REVIEW_REQUIRED');
+    assert.equal(r.roleId,'reviewer');
+    assert.equal(r.requiresOwnerReview,true);
+    for(const k of ['authorizesInference','authorizesDeployment','authorizesD1Write','authorizesApproval','changesSixCallOrder'])
+      assert.equal(r[k],false);
+    assert.equal(r.modelCalls,0);
+  });
+}
+for(const phrase of ['research SELECT * FROM users','research about UPDATE latency trends']){
+  test('non-write research remains advisory: '+phrase,()=>{
+    const r=triageOfflineTask(phrase);
+    assert.equal(r.status,'ADVISORY_ONLY');
+    assert.equal(r.roleId,'researcher');
+    assert.equal(r.requiresOwnerReview,false);
+    assert.equal(r.modelCalls,0);
+  });
+}
