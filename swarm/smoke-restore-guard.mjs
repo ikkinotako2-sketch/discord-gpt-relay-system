@@ -25,6 +25,7 @@ export function decideSmokeRestore({accountId,worker,databaseId,baselineVersion,
  currentVersions,bindings,expiryMs,nowMs=Date.now(),ownerEmergency=false}={}){
  if(accountId!==DISCORD_SMOKE_TARGET.accountId || worker!==DISCORD_SMOKE_TARGET.worker ||
     databaseId!==DISCORD_SMOKE_TARGET.databaseId)return denied('WRONG_DISCORD_RESOURCE');
+ if(typeof ownerEmergency!=='boolean')return denied('EMERGENCY_FLAG_INVALID');
  if(!uuid.test(baselineVersion||'')||!uuid.test(smokeVersion||'')||
     baselineVersion===smokeVersion)return denied('UNVERIFIED_DISTINCT_VERSION_PAIR');
  // Reject split deployments or another operator's new version: no blind overwrite.
