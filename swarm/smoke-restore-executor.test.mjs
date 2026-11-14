@@ -208,3 +208,18 @@ test('invalid clock and expiry do not make Cloudflare calls',async()=>{
   assert.equal(m.calls.length,0);
  }
 });
+
+test('truthy nonboolean execute never bypasses the owner approval gate',async()=>{
+ for(const execute of ['false','true',1,[],{}]){
+  const m=mockCloudflare();
+  await rejects(restoreDiscordSmoke(input(m,{execute})),'OWNER_EXECUTION_APPROVAL_REQUIRED');
+  assert.equal(m.calls.length,0);
+ }
+});
+test('ambiguous emergency flag is rejected before any network request',async()=>{
+ for(const ownerEmergency of ['false','true',1,[],{},null]){
+  const m=mockCloudflare();
+  await rejects(restoreDiscordSmoke(input(m,{ownerEmergency})),'EMERGENCY_FLAG_INVALID');
+  assert.equal(m.calls.length,0);
+ }
+});

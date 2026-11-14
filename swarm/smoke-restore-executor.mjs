@@ -131,8 +131,9 @@ export async function restoreDiscordSmoke({
  client,baselineVersion,smokeVersion,expectedDeploymentId,expiryMs,
  nowMs=Date.now(),ownerEmergency=false,execute=false,approval=''
 }={}){
- if(!execute||approval!=='RESTORE-DISCORD-SMOKE-BASELINE-ONCE')
+ if(execute!==true||approval!=='RESTORE-DISCORD-SMOKE-BASELINE-ONCE')
   block('OWNER_EXECUTION_APPROVAL_REQUIRED');
+ if(typeof ownerEmergency!=='boolean')block('EMERGENCY_FLAG_INVALID');
  requireUuid(baselineVersion,'BASELINE_VERSION_UNVERIFIED');
  requireUuid(smokeVersion,'SMOKE_VERSION_UNVERIFIED');
  requireUuid(expectedDeploymentId,'EXPECTED_DEPLOYMENT_UNVERIFIED');

@@ -54,3 +54,16 @@ test('incomplete or missing remote metadata cannot authorize any deployment acti
  for(const input of [{bindings:undefined},{bindings:[]},{currentVersions:undefined},{nowMs:NaN}])
   assert.equal(decideSmokeRestore(setup(input)).allowed,false);
 });
+
+test('ambiguous ownerEmergency values cannot impersonate emergency approval',()=>{
+ for(const ownerEmergency of ['false','true',1,[],{},null]){
+  for(const nowMs of [now,expires+1000]){
+   const r=decideSmokeRestore(setup({nowMs,ownerEmergency}));
+   assert.equal(r.allowed,false);
+   assert.equal(r.action,'BLOCKED');
+   assert.equal(r.reason,'EMERGENCY_FLAG_INVALID');
+  }
+ }
+ assert.equal(decideSmokeRestore(setup({nowMs:now,ownerEmergency:false})).action,'WAIT');
+ assert.equal(decideSmokeRestore(setup({nowMs:now,ownerEmergency:true})).action,'RESTORE_BASELINE');
+});
