@@ -1,0 +1,78 @@
+name: Relay Restore Node 22 Isolated Acceptance (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - offline/relay-node22-runner-20261116-r1
+    paths:
+      - .github/workflows/relay-restore-node22-isolated.yml
+      - swarm/smoke-restore-guard.mjs
+      - swarm/smoke-restore-executor.mjs
+      - swarm/smoke-restore-guard.test.mjs
+      - swarm/smoke-restore-executor.test.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-restore-node22-isolated-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-only:
+    name: Node 22 reviewed restore regression (mock only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      CI: "true"
+      DISCORD_BOT_TOKEN: ""
+      CLOUDFLARE_API_TOKEN: ""
+      YOUTUBE_API_KEY: ""
+    steps:
+      - name: Read-only checkout (no stored token)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Install official Node 22 runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify reviewed PR 53 blob identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object swarm/smoke-restore-guard.mjs)" = "441e1d8bd33a18a1b990cb8ed41c6566a7c7c69e"
+          test "$(git hash-object swarm/smoke-restore-executor.mjs)" = "8524fdb23b0ebb433be4dac3e93108ec6c5527b1"
+          test "$(git hash-object swarm/smoke-restore-guard.test.mjs)" = "5b2fe3f0b1f782a362283eb95ea650b92c197fd2"
+          test "$(git hash-object swarm/smoke-restore-executor.test.mjs)" = "0622d015a9ab121952853c3b7d614661a1d57552"
+      - name: Verify syntax and exact runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node -e 'if(process.versions.node.split(".")[0] !== "22") process.exit(1)'
+          node --check swarm/smoke-restore-guard.mjs
+          node --check swarm/smoke-restore-executor.mjs
+          node --check swarm/smoke-restore-guard.test.mjs
+          node --check swarm/smoke-restore-executor.test.mjs
+      - name: Run 31 pure mocked restoration tests (NO LIVE CALL)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            swarm/smoke-restore-guard.test.mjs \
+            swarm/smoke-restore-executor.test.mjs \
+            | tee "$RUNNER_TEMP/relay-restore-node22.tap"
+          grep -qx '# tests 31' "$RUNNER_TEMP/relay-restore-node22.tap"
+          grep -qx '# pass 31' "$RUNNER_TEMP/relay-restore-node22.tap"
+          grep -qx '# fail 0' "$RUNNER_TEMP/relay-restore-node22.tap"
+          echo "Node 22 / 31-of-31 reviewed mocked tests PASS" >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve test output as evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-restore-node22-mock-tests
+          path: ${{ runner.temp }}/relay-restore-node22.tap
+          if-no-files-found: ignore
+          retention-days: 7
